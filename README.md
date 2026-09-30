@@ -1,12 +1,21 @@
 # SG Haze Checker – West & Central 🌫️📱
 
-Every hour this checks NEA's 1-hr PM2.5 readings (the same data haze.gov.sg
-shows) and sends a push notification to your iPhone when **West or Central**
-goes **above 55**.
+Hourly haze alerts for Singapore. Every hour this checks NEA's 1-hr PM2.5
+readings (the same data haze.gov.sg shows) and sends an alert when **West or
+Central** goes **above 55**, NEA's cut-off for the "Normal" band.
 
-It runs free on GitHub Actions, so your phone doesn't need to be on or have
-any app open. Notifications come through the free **ntfy** app and/or a
-**Telegram** bot.
+## Get alerts on Telegram
+
+**Add [@sg_haze_checker_bot](https://t.me/sg_haze_checker_bot) to your group.**
+That's it. The group is subscribed automatically.
+
+- **Just for yourself?** Open [@sg_haze_checker_bot](https://t.me/sg_haze_checker_bot)
+  and tap **Start**.
+- **To stop:** send `/stop`, or remove the bot from the group.
+- **To resubscribe:** send `/start` (in a group: `/start@sg_haze_checker_bot`).
+
+The bot checks in once an hour, so the welcome message (and any reply to
+`/start` or `/stop`) can take up to an hour to arrive.
 
 ## What an alert looks like
 
@@ -20,158 +29,91 @@ Central: 58 ⚠️
 North: 70 ⚠️
 South: 11
 East: 9
+
+haze.gov.sg
 ```
 
-Watched regions are listed first. ⚠️ marks any region above 55, but only the
-watched ones (West, Central) trigger an alert. Tapping it opens haze.gov.sg.
+West and Central are listed first. ⚠️ marks any region above 55, but only
+West and Central trigger an alert. While the air stays above 55, you get an
+update every hour. Nothing is sent when the air is fine.
 
-## Setup (about 5 minutes)
+## Privacy
 
-1. **Install ntfy on your iPhone.** Get
-   [ntfy from the App Store](https://apps.apple.com/app/ntfy/id1625396347),
-   open it, allow notifications.
-2. **Pick a private topic name.** Tap **+** and subscribe to a topic name that's
-   hard to guess, e.g. `haze-sg-8x2k-qz`. Anyone who knows the name can see
-   its messages, so don't use something like `haze`.
-3. **Tell GitHub your topic.** In this repo on GitHub, go to
-   **Settings → Secrets and variables → Actions → New repository secret**.
-   Name: `NTFY_TOPIC`, value: your topic name.
-4. **Send a test.** Go to **Actions → Hourly haze check → Run workflow**
-   (leave "Send a test notification" ticked). Your phone should buzz within a
-   minute.
+- Nobody else can see who uses the bot. The group list is stored encrypted,
+  and names or group titles never appear in this repo or its logs.
+- The bot only reacts to `/start` and `/stop`. It ignores other messages in
+  your group.
 
-   On a phone, the **Run workflow** button is hidden. Open the repo in Safari
-   and choose **aA → Request Desktop Website**, or use a computer.
+---
 
-That's it. It checks every hour on its own; nothing else to run.
+## For the maintainer
 
-## Telegram alerts (optional)
+Runs free on GitHub Actions (public repo = unlimited minutes). Your phone
+doesn't need to be on.
 
-A Telegram bot sends the same alerts to **every group it's added to** and to
-anyone who messages it `/start`. Works alongside ntfy or instead of it.
+### Secrets
 
-### Setup
+Settings → Secrets and variables → Actions → **Secrets** tab (never
+"Variables", which are public):
 
-1. **Create a bot.** In Telegram, message **@BotFather** → `/newbot` → pick a
-   name and a username ending in `bot`. It replies with a **token** like
-   `123456789:AAH...`. Keep it private.
-2. **Get your own chat ID** (so the bot can report to you). Open your bot,
-   tap **Start**, then open this in a browser with your token in it:
-   `https://api.telegram.org/bot<TOKEN>/getUpdates`
-   and find `"chat":{"id": ...}`. If you see `"result":[]`, send the bot
-   another message and reload.
-3. **Add secrets** (Settings → Secrets and variables → Actions):
-
-   | Secret | Value |
-   |---|---|
-   | `TELEGRAM_BOT_TOKEN` | the token (required) |
-   | `TELEGRAM_OWNER_CHAT_ID` | your chat ID: you get "who added the bot where" reports and test messages |
-   | `TELEGRAM_CHAT_ID` | optional: chats that should *always* get alerts, comma-separated |
-
-4. **Send a test** (Actions → Hourly haze check → Run workflow). Tests go only
-   to the owner and `TELEGRAM_CHAT_ID`, never to everyone's groups.
-
-### How subscribing works
-
-| Someone… | What happens (at the next hourly run) |
+| Secret | What it's for |
 |---|---|
-| adds the bot to a group | group is subscribed and gets a welcome message; you get "➕ Jane (@jane) added the bot to group "Family"" |
-| sends `/start` to the bot (or `/start@YourBot` in a group) | that chat is subscribed and welcomed; you get a 🔔 report |
-| sends `/stop` | that chat is unsubscribed; you get a 🔕 report |
-| removes the bot from a group, or blocks it | chat is unsubscribed; you get a ➖ report |
+| `TELEGRAM_BOT_TOKEN` | the bot's token |
+| `TELEGRAM_OWNER_CHAT_ID` | your chat: gets "who added the bot where" reports (➕ ➖ 🔔 🔕 ⛔) and test messages |
+| `TELEGRAM_CHAT_ID` | optional: chats that should *always* get alerts, comma-separated |
+| `NTFY_TOPIC` | optional: also push to your private [ntfy](https://apps.apple.com/app/ntfy/id1625396347) topic. Don't share the topic name; anyone with it can read and post to it |
 
-You'll want alerts yourself too: sending the bot `/start` subscribes your own
-chat.
+**Test:** Actions → Hourly haze check → **Run workflow**. Tests go only to
+you (owner, `TELEGRAM_CHAT_ID`, ntfy), never to subscribers' groups. On a
+phone, open the repo in Safari → **aA → Request Desktop Website** to see the
+button.
 
-**Things to know:**
+### Settings (optional)
 
-- **Replies aren't instant.** The bot only checks messages during the hourly
-  run, so welcomes and reports arrive up to an hour later.
-- **Anyone who finds the bot can add it** to their group and get alerts.
-  You'll be told each time. Telegram shows you who added it and where, but
-  never who read a message.
-- **At most 50 chats** can subscribe (change with a `TELEGRAM_MAX_CHATS`
-  variable). Beyond that, new groups are politely turned away and you get a
-  ⛔ report, so nobody can flood the bot.
-- If GitHub ever clears the Actions cache, or you change the bot token,
-  groups need to send `/start@YourBot` again to resubscribe. Fixed
+Settings → Secrets and variables → Actions → **Variables** tab:
+
+| Variable | Default | Options |
+|---|---|---|
+| `REGIONS` | `west,central` | comma-separated; any of `west`, `east`, `central`, `north`, `south`. Alerts if **any** is above the threshold |
+| `THRESHOLD` | `55` | alerts when a reading is **above** it |
+| `METRIC` | `pm25` | `pm25` = 1-hr PM2.5 (µg/m³), `psi` = 24-hr PSI (not yet tested live; run a test after switching) |
+| `TELEGRAM_MAX_CHATS` | `50` | new groups beyond this are turned away (you get a ⛔ report) |
+
+### How it works
+
+- **Timing:** NEA stamps each reading on the hour and publishes it a few
+  minutes later. The check starts at **:05** and retries every 30 s until
+  **:15**, stopping as soon as the new reading appears (otherwise it uses the
+  latest available). GitHub sometimes starts scheduled runs 5–20 min late.
+- **Subscribers:** each run reads new bot activity (joins, removals, `/start`,
+  `/stop`) and updates the group list. Chats that remove or block the bot are
+  dropped automatically.
+- **Storage:** the list (chat IDs only) is kept in the Actions cache,
+  AES-256 encrypted with the bot token. If the cache is ever cleared, or you
+  change the token, groups need to `/start@sg_haze_checker_bot` again.
   `TELEGRAM_CHAT_ID` chats are never lost.
-- If the workflow is paused for more than 24 hours, Telegram discards joins
-  and `/start`s from that time; those chats need to `/start` again.
-- If a send fails for reasons other than the bot being removed, ntfy still
-  goes out and the run shows as failed in the Actions tab.
+- If the workflow is paused for over 24 hours, Telegram discards joins and
+  `/start`s from that time; those chats need to `/start` again.
 
-### Privacy (this repo is public)
+### Privacy & cost
 
-- **Token and chat IDs are GitHub secrets.** They're encrypted, never in the
-  code, and blanked out (`***`) in logs. Forks and pull requests don't get
-  them, and only people with write access can run the workflow.
-- **Who used the bot is never public.** Names, handles and group titles are
-  sent only to you in Telegram. Logs show counts only
-  (e.g. "3 subscribed chats").
-- **The subscriber list is encrypted** (AES-256, keyed by your bot token)
-  before it goes into the Actions cache, so even the cache is useless without
-  your secret.
+- Token and chat IDs live only in GitHub secrets: encrypted, masked as `***`
+  in logs, and not given to forks or pull requests. Only people with write
+  access can run the workflow.
+- Who used the bot is sent only to you in Telegram. Logs show counts only.
+- **Free, and abuse can't cost money.** The Telegram Bot API has no billing
+  (over its rate limits it just rejects messages), and public repos get
+  unlimited Actions minutes. The worst case is someone adding the bot to
+  groups (capped, and you're told). If the token leaks: @BotFather →
+  `/revoke`, then update the secret.
 
-### Cost
+### Upkeep
 
-**Free, and abuse can't make it cost you money.** The Telegram Bot API is
-free with no paid tier to trip into, and public repos get unlimited Actions
-minutes. The worst someone can do is add the bot to groups (capped at 50,
-and you're told) or spam it with messages, which it ignores. If the token
-ever leaks, message @BotFather → `/revoke` and update the secret.
+- GitHub pauses scheduled jobs after 60 days with no repo activity. You'll get
+  an email; click **Enable workflow** in the Actions tab.
+- **To stop everything:** Actions → Hourly haze check → **⋯ → Disable workflow**.
 
-## Sharing with others
-
-**Telegram (easiest for others):** add them to a group with the bot, or tell
-them to message the bot `/start`. Alerts come from the bot's account, so
-members can't fake them.
-
-**ntfy:** install ntfy → tap **+** → subscribe to your topic name → allow
-notifications.
-
-- The topic name works like a shared password. Anyone with it can read the
-  alerts and also post to the topic, so share it only with people you trust.
-- If it leaks, pick a new topic, update the `NTFY_TOPIC` secret, and send the
-  new name to the people you want to keep.
-- Everyone gets the same alerts. Someone who wants different regions or a
-  different threshold needs their own copy of this repo.
-
-## Changing settings (optional)
-
-Under **Settings → Secrets and variables → Actions → Variables**, add any of:
-
-| Variable    | Default        | Options                                                                          |
-|-------------|----------------|----------------------------------------------------------------------------------|
-| `REGIONS`   | `west,central` | comma-separated; any of `west`, `east`, `central`, `north`, `south`. Alerts if **any** is above the threshold |
-| `THRESHOLD` | `55`           | any number; alerts when a reading is **above** it                                 |
-| `METRIC`    | `pm25`         | `pm25` = 1-hr PM2.5 (µg/m³), `psi` = 24-hr PSI (not yet tested live; run a test after switching) |
-
-**Why 55?** NEA's 1-hr PM2.5 "Normal" band is 0–55 µg/m³, and 56+ is
-"Elevated". So alerts fire as soon as air leaves NEA's Normal band.
-
-## Timing
-
-NEA stamps each reading on the hour (e.g. 10:00) and publishes it a few
-minutes later. The check starts at **:05** and retries every 30 seconds until
-**:15**, stopping the moment the new reading appears. If it's still not out by
-:15, it uses the latest reading available (last hour's), so you never miss a
-check.
-
-## Things to know
-
-- **You get an alert every hour while it stays above the limit**, not just once.
-- GitHub sometimes runs scheduled jobs 5–20 minutes late at busy times.
-- **Public repo:** unlimited free Actions minutes, but GitHub pauses scheduled
-  jobs after 60 days with no repo activity. You'll get an email; click
-  **Enable workflow** in the Actions tab.
-- **Private repo:** runs use your free 2,000 Actions minutes/month. Each run is
-  billed by how long it waits for NEA, rounded up to the minute (~2 min if NEA
-  publishes by :06, ~3 min by :07). If NEA is regularly slow you may run out
-  near month-end; GitHub just stops the runs and won't charge you.
-- **To stop it:** Actions → Hourly haze check → **⋯ → Disable workflow**.
-
-## Run locally
+### Run locally
 
 ```bash
 NTFY_TOPIC=your-topic FORCE_TEST=1 python3 haze_check.py
