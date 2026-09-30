@@ -13,20 +13,41 @@ on:
         type: boolean
         default: true
 
+# One run at a time, so two runs never overwrite each other's subscriber list.
+concurrency:
+  group: haze-check
+  cancel-in-progress: false
+
 jobs:
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 14
     steps:
       - uses: actions/checkout@v4
+      # Telegram subscriber list (chat IDs only) lives in the Actions cache.
+      # Each run restores the newest copy and saves an updated one.
+      - name: Restore Telegram subscriber list
+        uses: actions/cache/restore@v4
+        with:
+          path: .state
+          key: telegram-chats-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: telegram-chats-
       - name: Check haze and notify
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_OWNER_CHAT_ID: ${{ secrets.TELEGRAM_OWNER_CHAT_ID }}
+          TELEGRAM_STATE: .state/telegram_chats.json
           # Edit these in Settings > Secrets and variables > Actions > Variables
           REGIONS: ${{ vars.REGIONS || 'west,central' }}
           THRESHOLD: ${{ vars.THRESHOLD || '55' }}
           METRIC: ${{ vars.METRIC || 'pm25' }}
           FORCE_TEST: ${{ github.event_name == 'workflow_dispatch' && inputs.test && '1' || '0' }}
         run: python3 haze_check.py
+      - name: Save Telegram subscriber list
+        if: always() && hashFiles('.state/telegram_chats.json') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: .state
+          key: telegram-chats-${{ github.run_id }}-${{ github.run_attempt }}

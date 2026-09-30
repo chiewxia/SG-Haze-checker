@@ -7,8 +7,13 @@ Standard library only, so it runs anywhere Python 3.8+ exists.
 Config (environment variables):
   NTFY_TOPIC   your private ntfy topic name
   TELEGRAM_BOT_TOKEN  token from @BotFather
-  TELEGRAM_CHAT_ID    chat/group ID(s) to message, comma-separated
-               (set NTFY_TOPIC, the Telegram pair, or both)
+  TELEGRAM_CHAT_ID    optional fixed chat ID(s), comma-separated. Groups
+                      the bot is added to (and people who /start it) are
+                      subscribed automatically.
+  TELEGRAM_OWNER_CHAT_ID  optional; gets "who added the bot where" reports
+                      and test messages
+  TELEGRAM_STATE      default ".state/telegram_chats.json" subscriber list
+               (set NTFY_TOPIC, TELEGRAM_BOT_TOKEN, or both)
   REGIONS      default "west,central"  comma-separated regions to watch
                                 (west/east/central/north/south); alert if ANY
                                 is above the threshold
@@ -27,6 +32,8 @@ import sys
 import time
 import urllib.request
 from datetime import datetime, timezone
+
+import telegram_subs
 
 API_BASE = "https://api-open.data.gov.sg/v2/real-time/api/"
 
@@ -137,20 +144,42 @@ def telegram_text(title, message):
     )
 
 
-def send_telegram(token, chat_id, title, message):
-    body = {
-        "chat_id": chat_id,
-        "text": telegram_text(title, message),
-        "parse_mode": "HTML",
-        "link_preview_options": {"is_disabled": True},
-    }
-    req = urllib.request.Request(
-        f"https://api.telegram.org/bot{token}/sendMessage",
-        data=json.dumps(body).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    urllib.request.urlopen(req, timeout=30).close()
+class TelegramChannel:
+    """Sends to every group/chat subscribed to the bot, plus fixed chat IDs.
+
+    Test sends go only to the fixed chat IDs and the owner, so testing doesn't
+    spam everyone's groups.
+    """
+
+    def __init__(self, token, chat_ids, owner_chat_id, state_path):
+        self.token = token
+        self.chat_ids = chat_ids
+        self.owner_chat_id = owner_chat_id
+        self.state_path = state_path
+        self.state = telegram_subs.load_state(state_path)
+        self.test_mode = False
+
+    def sync(self, welcome):
+        self.state = telegram_subs.sync(
+            self.token, self.state_path, self.owner_chat_id, welcome
+        )
+
+    def __call__(self, title, message, priority):
+        if self.test_mode:
+            fixed = self.chat_ids + ([self.owner_chat_id] if self.owner_chat_id else [])
+            if not fixed:
+                print("Telegram: test sends go to TELEGRAM_CHAT_ID/TELEGRAM_OWNER_CHAT_ID only; none set.")
+                return
+            failed = telegram_subs.broadcast(
+                self.token, {"chats": {}}, None, fixed, telegram_text(title, message)
+            )
+        else:
+            failed = telegram_subs.broadcast(
+                self.token, self.state, self.state_path, self.chat_ids,
+                telegram_text(title, message),
+            )
+        if failed:
+            raise RuntimeError(f"{failed} Telegram chat(s) failed")
 
 
 def build_channels(env):
@@ -164,14 +193,12 @@ def build_channels(env):
         )
     token = env.get("TELEGRAM_BOT_TOKEN", "").strip()
     chat_ids = [c.strip() for c in env.get("TELEGRAM_CHAT_ID", "").split(",") if c.strip()]
-    if token and chat_ids:
-        for chat_id in chat_ids:
-            channels.append(
-                (f"telegram:{chat_id}",
-                 lambda t, m, p, c=chat_id: send_telegram(token, c, t, m))
-            )
-    elif token or chat_ids:
-        sys.exit("Set both TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID - see README.md")
+    owner = env.get("TELEGRAM_OWNER_CHAT_ID", "").strip()
+    if token:
+        state_path = env.get("TELEGRAM_STATE", ".state/telegram_chats.json")
+        channels.append(("telegram", TelegramChannel(token, chat_ids, owner, state_path)))
+    elif chat_ids or owner:
+        sys.exit("TELEGRAM_BOT_TOKEN is not set - see README.md")
     return channels
 
 
@@ -208,6 +235,20 @@ def main():
         sys.exit(f"METRIC must be one of {list(METRICS)}")
     endpoint, key, label, unit = METRICS[metric]
 
+    watched = " or ".join(r.title() for r in regions)
+    telegram = dict(channels).get("telegram")
+    sync_failed = False
+    if telegram:
+        try:
+            telegram.sync(
+                f"👋 This chat will get haze alerts when {watched} {label} "
+                f"goes above {threshold:g} (checked hourly, data from NEA).\n"
+                "Send /stop to turn them off."
+            )
+        except Exception as e:  # noqa: BLE001 - still send alerts to known chats
+            print(f"Telegram sync failed: {e}")
+            sync_failed = True
+
     ts, all_regions = fetch_fresh(
         API_BASE + endpoint, key, regions, stop_minute, poll_seconds
     )
@@ -230,13 +271,18 @@ def main():
         )
         print("Alert sent.")
     elif force:
+        if telegram:
+            telegram.test_mode = True
         notify(
             channels,
             title="Haze checker test",
-            message=f"Setup works. Alerts fire when {' or '.join(r.title() for r in regions)} is above {threshold:g}.\n\n{details}",
+            message=f"Setup works. Alerts fire when {watched} is above {threshold:g}.\n\n{details}",
             priority="default",
         )
         print("Test notification sent.")
+
+    if sync_failed:
+        sys.exit("Telegram subscriber sync failed (see above)")
 
 
 if __name__ == "__main__":

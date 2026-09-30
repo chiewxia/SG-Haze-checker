@@ -76,17 +76,25 @@ class ChannelsTest(unittest.TestCase):
         names = [n for n, _ in build_channels({"NTFY_TOPIC": "t"})]
         self.assertEqual(names, ["ntfy"])
 
-    def test_ntfy_and_multiple_telegram_chats(self):
-        names = [n for n, _ in build_channels({
+    def test_ntfy_and_telegram(self):
+        channels = dict(build_channels({
             "NTFY_TOPIC": "t",
             "TELEGRAM_BOT_TOKEN": "tok",
             "TELEGRAM_CHAT_ID": "123, -456",
-        })]
-        self.assertEqual(names, ["ntfy", "telegram:123", "telegram:-456"])
+            "TELEGRAM_STATE": "/nonexistent/state.json",
+        }))
+        self.assertEqual(list(channels), ["ntfy", "telegram"])
+        self.assertEqual(channels["telegram"].chat_ids, ["123", "-456"])
 
-    def test_half_configured_telegram_exits(self):
+    def test_telegram_token_alone_is_enough(self):
+        names = [n for n, _ in build_channels({
+            "TELEGRAM_BOT_TOKEN": "tok", "TELEGRAM_STATE": "/nonexistent/s.json"
+        })]
+        self.assertEqual(names, ["telegram"])
+
+    def test_chat_id_without_token_exits(self):
         with self.assertRaises(SystemExit):
-            build_channels({"TELEGRAM_BOT_TOKEN": "tok"})
+            build_channels({"TELEGRAM_CHAT_ID": "123"})
 
     def test_nothing_configured(self):
         self.assertEqual(build_channels({}), [])

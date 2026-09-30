@@ -47,35 +47,64 @@ That's it. It checks every hour on its own; nothing else to run.
 
 ## Telegram alerts (optional)
 
-Send the same alerts to Telegram, to yourself or a group. Works alongside
-ntfy or instead of it.
+A Telegram bot sends the same alerts to **every group it's added to** and to
+anyone who messages it `/start`. Works alongside ntfy or instead of it.
+
+### Setup
 
 1. **Create a bot.** In Telegram, message **@BotFather** → `/newbot` → pick a
    name and a username ending in `bot`. It replies with a **token** like
    `123456789:AAH...`. Keep it private.
-2. **Get the chat ID.**
-   - *Just you:* open your new bot, tap **Start**, send it any message.
-   - *A group:* add the bot to the group, then send `/start@YourBotName` in
-     the group.
-
-   Then open this in a browser (with your token in it):
+2. **Get your own chat ID** (so the bot can report to you). Open your bot,
+   tap **Start**, then open this in a browser with your token in it:
    `https://api.telegram.org/bot<TOKEN>/getUpdates`
-   and find `"chat":{"id": ...}`. That number is the chat ID (groups start
-   with `-`). If you see `"result":[]`, send another message and reload.
-3. **Add two secrets** (Settings → Secrets and variables → Actions):
-   - `TELEGRAM_BOT_TOKEN` = the token
-   - `TELEGRAM_CHAT_ID` = the chat ID. For several chats, separate with
-     commas: `12345678,-1001234567890`
-4. **Send a test** (Actions → Hourly haze check → Run workflow).
+   and find `"chat":{"id": ...}`. If you see `"result":[]`, send the bot
+   another message and reload.
+3. **Add secrets** (Settings → Secrets and variables → Actions):
 
-If a Telegram send fails, ntfy still goes out, and the run shows as failed
-in the Actions tab so you can see what went wrong.
+   | Secret | Value |
+   |---|---|
+   | `TELEGRAM_BOT_TOKEN` | the token (required) |
+   | `TELEGRAM_OWNER_CHAT_ID` | your chat ID: you get "who added the bot where" reports and test messages |
+   | `TELEGRAM_CHAT_ID` | optional: chats that should *always* get alerts, comma-separated |
+
+4. **Send a test** (Actions → Hourly haze check → Run workflow). Tests go only
+   to the owner and `TELEGRAM_CHAT_ID`, never to everyone's groups.
+
+### How subscribing works
+
+| Someone… | What happens (at the next hourly run) |
+|---|---|
+| adds the bot to a group | group is subscribed and gets a welcome message; you get "➕ Jane (@jane) added the bot to group "Family"" |
+| sends `/start` to the bot (or `/start@YourBot` in a group) | that chat is subscribed and welcomed; you get a 🔔 report |
+| sends `/stop` | that chat is unsubscribed; you get a 🔕 report |
+| removes the bot from a group, or blocks it | chat is unsubscribed; you get a ➖ report |
+
+You'll want alerts yourself too: sending the bot `/start` subscribes your own
+chat.
+
+**Things to know:**
+
+- **Replies aren't instant.** The bot only checks messages during the hourly
+  run, so welcomes and reports arrive up to an hour later.
+- **Anyone who finds the bot can add it** to their group and get alerts.
+  You'll be told each time. Telegram shows you who added it and where, but
+  never who read a message.
+- **The subscriber list is stored in GitHub's Actions cache** (chat IDs only;
+  names are sent only to you in Telegram, never saved to files or logs,
+  since a public repo's logs are public). If GitHub ever clears the cache,
+  groups need to send `/start@YourBot` again to resubscribe; fixed
+  `TELEGRAM_CHAT_ID` chats are never lost.
+- If the workflow is paused for more than 24 hours, Telegram discards joins
+  and `/start`s from that time; those chats need to `/start` again.
+- If a send fails for reasons other than the bot being removed, ntfy still
+  goes out and the run shows as failed in the Actions tab.
 
 ## Sharing with others
 
-**Telegram (easiest for others):** add them to the Telegram group your bot
-posts in. Alerts come from the bot's account, so members can't fake them,
-and you control who's in the group.
+**Telegram (easiest for others):** add them to a group with the bot, or tell
+them to message the bot `/start`. Alerts come from the bot's account, so
+members can't fake them.
 
 **ntfy:** install ntfy → tap **+** → subscribe to your topic name → allow
 notifications.
