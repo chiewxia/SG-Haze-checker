@@ -1,0 +1,31 @@
+name: Hourly haze check
+
+on:
+  schedule:
+    # Every hour at :15 (NEA publishes readings on the hour). Times are UTC.
+    - cron: "15 * * * *"
+  workflow_dispatch:
+    inputs:
+      test:
+        description: "Send a test notification even if air is fine"
+        type: boolean
+        default: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Check haze and notify
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          # Edit these in Settings > Secrets and variables > Actions > Variables
+          REGION: ${{ vars.REGION || 'west' }}
+          THRESHOLD: ${{ vars.THRESHOLD || '55' }}
+          METRIC: ${{ vars.METRIC || 'pm25' }}
+          FORCE_TEST: ${{ github.event_name == 'workflow_dispatch' && inputs.test && '1' || '0' }}
+        run: python haze_check.py
