@@ -19,7 +19,7 @@ Config (environment variables):
                                 (west/east/central/north/south); alert if ANY
                                 is above the threshold. Telegram chats can
                                 override with /regions.
-  THRESHOLD    default 55       alert when the reading is ABOVE this
+  THRESHOLD    default 40       alert when the reading is ABOVE this
                                 (Telegram chats can override with /threshold)
   METRIC       default "pm25"   "pm25" = 1-hr PM2.5 (µg/m³), "psi" = 24-hr PSI
   NTFY_SERVER  default "https://ntfy.sh"
@@ -274,7 +274,7 @@ def main():
         for r in os.environ.get("REGIONS", "west,central").split(",")
         if r.strip()
     ]
-    threshold = float(os.environ.get("THRESHOLD", "55"))
+    threshold = float(os.environ.get("THRESHOLD", "40"))
     metric = os.environ.get("METRIC", "pm25").strip().lower()
     force = os.environ.get("FORCE_TEST") == "1"
     stop_minute = int(os.environ.get("STOP_MINUTE", "30"))

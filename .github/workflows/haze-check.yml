@@ -42,7 +42,7 @@ jobs:
           TELEGRAM_STATE: .state/telegram_chats.json
           # Edit these in Settings > Secrets and variables > Actions > Variables
           REGIONS: ${{ vars.REGIONS || 'west,central' }}
-          THRESHOLD: ${{ vars.THRESHOLD || '55' }}
+          THRESHOLD: ${{ vars.THRESHOLD || '40' }}
           METRIC: ${{ vars.METRIC || 'pm25' }}
           STOP_MINUTE: ${{ vars.STOP_MINUTE || '30' }}
           POLL_SECONDS: ${{ vars.POLL_SECONDS || '60' }}
