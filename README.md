@@ -95,7 +95,11 @@ button.
 
 ### Settings (optional)
 
-Settings → Secrets and variables → Actions → **Variables** tab:
+Defaults live in `DEFAULTS` at the top of [`haze_check.py`](haze_check.py).
+Edit them there, **not** in the workflow file: changing the workflow file can
+reset GitHub's hourly schedule. To override without touching code, add a
+repo variable with the same name (Settings → Secrets and variables → Actions →
+**Variables** tab):
 
 | Variable | Default | Options |
 |---|---|---|

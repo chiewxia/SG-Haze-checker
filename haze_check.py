@@ -40,6 +40,27 @@ import telegram_subs
 
 API_BASE = "https://api-open.data.gov.sg/v2/real-time/api/"
 
+# Default settings. Change them here (not in the workflow file, so the hourly
+# schedule isn't reset), or override without code via repo Variables of the
+# same name (Settings > Secrets and variables > Actions > Variables).
+DEFAULTS = {
+    "REGIONS": "west,central",
+    "THRESHOLD": "40",
+    "METRIC": "pm25",
+    "STOP_MINUTE": "30",
+    "POLL_SECONDS": "60",
+    "TELEGRAM_MAX_CHATS": "50",
+}
+
+
+def setting(name, env=None):
+    """Env var value, or the default above if unset/blank.
+
+    GitHub passes unset repo Variables as empty strings, hence the blank check.
+    """
+    value = (env if env is not None else os.environ).get(name, "").strip()
+    return value or DEFAULTS[name]
+
 # metric -> (API endpoint, reading key, label, unit)
 METRICS = {
     "pm25": ("pm25", "pm25_one_hourly", "1-hr PM2.5", "µg/m³"),
@@ -237,7 +258,7 @@ def build_channels(env):
     owner = env.get("TELEGRAM_OWNER_CHAT_ID", "").strip()
     if token:
         state_path = env.get("TELEGRAM_STATE", ".state/telegram_chats.json")
-        max_chats = int(env.get("TELEGRAM_MAX_CHATS", "50"))
+        max_chats = int(setting("TELEGRAM_MAX_CHATS", env))
         channels.append(
             ("telegram", TelegramChannel(token, chat_ids, owner, state_path, max_chats))
         )
@@ -271,14 +292,14 @@ def main():
         sys.exit("No notification channel set (NTFY_TOPIC or Telegram) - see README.md")
     regions = [
         r.strip().lower()
-        for r in os.environ.get("REGIONS", "west,central").split(",")
+        for r in setting("REGIONS").split(",")
         if r.strip()
     ]
-    threshold = float(os.environ.get("THRESHOLD", "40"))
-    metric = os.environ.get("METRIC", "pm25").strip().lower()
+    threshold = float(setting("THRESHOLD"))
+    metric = setting("METRIC").lower()
     force = os.environ.get("FORCE_TEST") == "1"
-    stop_minute = int(os.environ.get("STOP_MINUTE", "30"))
-    poll_seconds = float(os.environ.get("POLL_SECONDS", "60"))
+    stop_minute = int(setting("STOP_MINUTE"))
+    poll_seconds = float(setting("POLL_SECONDS"))
 
     if metric not in METRICS:
         sys.exit(f"METRIC must be one of {list(METRICS)}")

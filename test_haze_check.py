@@ -156,6 +156,14 @@ class NtfyUnaffectedByChatSettingsTest(unittest.TestCase):
         self.assertEqual(ntfy_sent, [])  # ntfy (West/Central) is not
 
 
+class SettingTest(unittest.TestCase):
+    def test_blank_or_missing_uses_code_default(self):
+        from haze_check import DEFAULTS, setting
+        self.assertEqual(setting("THRESHOLD", {}), DEFAULTS["THRESHOLD"])
+        self.assertEqual(setting("THRESHOLD", {"THRESHOLD": ""}), DEFAULTS["THRESHOLD"])
+        self.assertEqual(setting("THRESHOLD", {"THRESHOLD": " 60 "}), "60")
+
+
 class IsCurrentHourTest(unittest.TestCase):
     # 10:07 SGT == 02:07 UTC
     NOW = datetime(2026, 9, 30, 2, 7, tzinfo=timezone.utc)
