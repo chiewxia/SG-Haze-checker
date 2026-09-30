@@ -156,6 +156,42 @@ class NtfyUnaffectedByChatSettingsTest(unittest.TestCase):
         self.assertEqual(ntfy_sent, [])  # ntfy (West/Central) is not
 
 
+class DuplicateRunTest(unittest.TestCase):
+    def test_second_run_for_same_reading_sends_nothing(self):
+        import os
+        import tempfile
+        from datetime import timedelta
+        from unittest import mock
+
+        import haze_check
+        import telegram_subs
+
+        now = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+        ts = now.astimezone(timezone(timedelta(hours=8))).isoformat()
+        readings = {"west": 61, "central": 10, "north": 10, "south": 10, "east": 10}
+        sent = []
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "s.json")
+            telegram_subs.save_state(path, {"offset": 0, "commands_version": telegram_subs.COMMANDS_VERSION,
+                                            "chats": {"-100": {"type": "group"}}})
+            env = {"NTFY_TOPIC": "t", "TELEGRAM_BOT_TOKEN": "tok", "TELEGRAM_STATE": path}
+
+            def fake_call(token, method, **p):
+                if method == "sendMessage":
+                    sent.append("telegram")
+                return [] if method == "getUpdates" else True
+
+            with mock.patch.dict(os.environ, env, clear=True), \
+                    mock.patch.object(haze_check, "fetch", lambda u: {"data": {"items": [
+                        {"timestamp": ts, "readings": {"pm25_one_hourly": readings}}]}}), \
+                    mock.patch.object(haze_check, "send_ntfy", lambda *a: sent.append("ntfy")), \
+                    mock.patch.object(telegram_subs, "call", fake_call):
+                haze_check.main()
+                self.assertEqual(sorted(sent), ["ntfy", "telegram"])
+                haze_check.main()  # e.g. GitHub's schedule firing after cron-job.org
+        self.assertEqual(sorted(sent), ["ntfy", "telegram"])  # nothing new
+
+
 class SettingTest(unittest.TestCase):
     def test_blank_or_missing_uses_code_default(self):
         from haze_check import DEFAULTS, setting

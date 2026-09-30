@@ -93,6 +93,29 @@ you (owner, `TELEGRAM_CHAT_ID`, ntfy), never to subscribers' groups. On a
 phone, open the repo in Safari → **aA → Request Desktop Website** to see the
 button.
 
+### Hourly timer (cron-job.org)
+
+GitHub's built-in schedule is "best effort" and can be late or skip hours,
+so a free [cron-job.org](https://cron-job.org) job starts the check instead.
+If GitHub's schedule also fires, that's fine: a run that finds this hour's
+reading was already handled sends no alerts (it just answers bot commands).
+
+1. **GitHub token:** profile picture → Settings → Developer settings →
+   Personal access tokens → **Fine-grained tokens** → Generate. Repository
+   access: **only SG-Haze-checker**. Permissions: **Actions: Read and write**,
+   nothing else. Longest expiry; set a reminder to renew.
+2. **cron-job.org → Create cronjob:**
+   - URL: `https://api.github.com/repos/denisexjq/SG-Haze-checker/actions/workflows/haze-check.yml/dispatches`
+   - Schedule: custom, minute **5** of every hour, time zone `Asia/Singapore`
+   - Turn on failure notifications (you'll get an email when the token expires)
+   - Advanced → Method `POST`, headers `Authorization: Bearer <token>`,
+     `Accept: application/vnd.github+json`, `X-GitHub-Api-Version: 2022-11-28`
+   - Body: `{"ref":"master","inputs":{"test":"false"}}`
+3. **Test run** should return **204**, and a run appears in the Actions tab.
+
+Keep the token on cron-job.org only, never in this repo. It can only start
+or cancel runs of this repo; if it leaks, delete it in GitHub and make a new one.
+
 ### Settings (optional)
 
 Defaults live in `DEFAULTS` at the top of [`haze_check.py`](haze_check.py).

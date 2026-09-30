@@ -268,12 +268,19 @@ def build_channels(env):
 
 
 def notify(channels, title, message, priority):
-    """Send the same message to every channel."""
-    run_sends([(name, lambda s=send: s(title, message, priority)) for name, send in channels])
+    """Send the same message to every channel; exit non-zero if any failed."""
+    failed = run_sends(
+        [(name, lambda s=send: s(title, message, priority)) for name, send in channels]
+    )
+    if failed:
+        sys.exit(f"Notification failed for: {', '.join(failed)}")
 
 
 def run_sends(sends):
-    """Run each (name, send) ; one failing doesn't stop the others."""
+    """Run each (name, send); one failing doesn't stop the others.
+
+    Returns the names that failed.
+    """
     failed = []
     for name, send in sends:
         try:
@@ -282,8 +289,7 @@ def run_sends(sends):
         except Exception as e:  # noqa: BLE001 - report and carry on
             print(f"Failed to send via {name}: {e}")
             failed.append(name)
-    if failed:
-        sys.exit(f"Notification failed for: {', '.join(failed)}")
+    return failed
 
 
 def main():
@@ -338,14 +344,25 @@ def main():
         def build(regs, thr):
             return make_alert(all_regions, regs, thr, label, unit, when)
 
-        sends = []
-        default_alert = build(regions, threshold)
-        ntfy = dict(channels).get("ntfy")
-        if ntfy and default_alert:
-            sends.append(("ntfy", lambda: ntfy(*default_alert, "high")))
-        if telegram:
-            sends.append(("telegram", lambda: telegram.send_alerts(build)))
-        run_sends(sends)
+        # If two timers start runs in the same hour (e.g. GitHub's schedule
+        # and cron-job.org), only the first one sends alerts for a reading.
+        state = telegram.state if telegram else None
+        if state is not None and state.get("last_alerted_reading") == ts:
+            print(f"Alerts for the {when} reading were already handled; not re-sending.")
+        else:
+            sends = []
+            default_alert = build(regions, threshold)
+            ntfy = dict(channels).get("ntfy")
+            if ntfy and default_alert:
+                sends.append(("ntfy", lambda: ntfy(*default_alert, "high")))
+            if telegram:
+                sends.append(("telegram", lambda: telegram.send_alerts(build)))
+            failed = run_sends(sends)
+            if state is not None:
+                state["last_alerted_reading"] = ts
+                telegram_subs.save_state(telegram.state_path, state)
+            if failed:
+                sys.exit(f"Notification failed for: {', '.join(failed)}")
 
     if sync_failed:
         sys.exit("Telegram subscriber sync failed (see above)")
