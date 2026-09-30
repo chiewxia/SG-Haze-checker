@@ -109,10 +109,11 @@ variables above.
 
 ### How it works
 
-- **Timing:** NEA stamps each reading on the hour and publishes it a few
-  minutes later. The check starts at **:05** and retries every 30 s until
-  **:15**, stopping as soon as the new reading appears (otherwise it uses the
+- **Timing:** NEA stamps each reading on the hour and publishes it some
+  minutes later. The check starts at **:05** and retries every minute until
+  **:30**, stopping as soon as the new reading appears (otherwise it uses the
   latest available). GitHub sometimes starts scheduled runs 5–20 min late.
+  Adjust with `STOP_MINUTE` / `POLL_SECONDS` variables if needed.
 - **Subscribers:** each run reads new bot activity (joins, removals, and
   commands) and updates the group list and each chat's settings. Chats that
   remove or block the bot are dropped automatically. Chats that haven't set

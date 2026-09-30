@@ -3,8 +3,8 @@ name: Hourly haze check
 on:
   schedule:
     # NEA stamps readings on the hour and publishes a few minutes later.
-    # Run at :05; the script retries every 30s until :15 and stops as soon as
-    # the new reading is out. (Avoids :00, when GitHub's scheduler is busiest.)
+    # Run at :05; the script retries every minute until :30 and stops as soon
+    # as the new reading is out. (Avoids :00, when GitHub's scheduler is busiest.)
     - cron: "5 * * * *"
   workflow_dispatch:
     inputs:
@@ -21,7 +21,7 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 14
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
       # Telegram subscriber list lives in the Actions cache, encrypted with the
@@ -44,6 +44,8 @@ jobs:
           REGIONS: ${{ vars.REGIONS || 'west,central' }}
           THRESHOLD: ${{ vars.THRESHOLD || '55' }}
           METRIC: ${{ vars.METRIC || 'pm25' }}
+          STOP_MINUTE: ${{ vars.STOP_MINUTE || '30' }}
+          POLL_SECONDS: ${{ vars.POLL_SECONDS || '60' }}
           FORCE_TEST: ${{ github.event_name == 'workflow_dispatch' && inputs.test && '1' || '0' }}
         run: |
           enc() { openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -pass env:TELEGRAM_BOT_TOKEN "$@"; }

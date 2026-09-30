@@ -24,9 +24,9 @@ Config (environment variables):
   METRIC       default "pm25"   "pm25" = 1-hr PM2.5 (µg/m³), "psi" = 24-hr PSI
   NTFY_SERVER  default "https://ntfy.sh"
   FORCE_TEST   if "1", always send a notification (to check your setup)
-  STOP_MINUTE  default 15       keep retrying until this minute past the hour
+  STOP_MINUTE  default 30       keep retrying until this minute past the hour
                                 for NEA to publish this hour's reading
-  POLL_SECONDS default 30       how often to retry while waiting
+  POLL_SECONDS default 60       how often to retry while waiting
 """
 import html
 import json
@@ -277,8 +277,8 @@ def main():
     threshold = float(os.environ.get("THRESHOLD", "55"))
     metric = os.environ.get("METRIC", "pm25").strip().lower()
     force = os.environ.get("FORCE_TEST") == "1"
-    stop_minute = int(os.environ.get("STOP_MINUTE", "15"))
-    poll_seconds = float(os.environ.get("POLL_SECONDS", "30"))
+    stop_minute = int(os.environ.get("STOP_MINUTE", "30"))
+    poll_seconds = float(os.environ.get("POLL_SECONDS", "60"))
 
     if metric not in METRICS:
         sys.exit(f"METRIC must be one of {list(METRICS)}")
