@@ -5,7 +5,8 @@ shows) and sends a push notification to your iPhone when **West or Central**
 goes **above 55**.
 
 It runs free on GitHub Actions, so your phone doesn't need to be on or have
-any app open. Notifications come through the free **ntfy** app.
+any app open. Notifications come through the free **ntfy** app and/or a
+**Telegram** bot.
 
 ## What an alert looks like
 
@@ -44,10 +45,40 @@ watched ones (West, Central) trigger an alert. Tapping it opens haze.gov.sg.
 
 That's it. It checks every hour on its own; nothing else to run.
 
+## Telegram alerts (optional)
+
+Send the same alerts to Telegram, to yourself or a group. Works alongside
+ntfy or instead of it.
+
+1. **Create a bot.** In Telegram, message **@BotFather** → `/newbot` → pick a
+   name and a username ending in `bot`. It replies with a **token** like
+   `123456789:AAH...`. Keep it private.
+2. **Get the chat ID.**
+   - *Just you:* open your new bot, tap **Start**, send it any message.
+   - *A group:* add the bot to the group, then send `/start@YourBotName` in
+     the group.
+
+   Then open this in a browser (with your token in it):
+   `https://api.telegram.org/bot<TOKEN>/getUpdates`
+   and find `"chat":{"id": ...}`. That number is the chat ID (groups start
+   with `-`). If you see `"result":[]`, send another message and reload.
+3. **Add two secrets** (Settings → Secrets and variables → Actions):
+   - `TELEGRAM_BOT_TOKEN` = the token
+   - `TELEGRAM_CHAT_ID` = the chat ID. For several chats, separate with
+     commas: `12345678,-1001234567890`
+4. **Send a test** (Actions → Hourly haze check → Run workflow).
+
+If a Telegram send fails, ntfy still goes out, and the run shows as failed
+in the Actions tab so you can see what went wrong.
+
 ## Sharing with others
 
-Anyone can get the same alerts: install ntfy → tap **+** → subscribe to your
-topic name → allow notifications.
+**Telegram (easiest for others):** add them to the Telegram group your bot
+posts in. Alerts come from the bot's account, so members can't fake them,
+and you control who's in the group.
+
+**ntfy:** install ntfy → tap **+** → subscribe to your topic name → allow
+notifications.
 
 - The topic name works like a shared password. Anyone with it can read the
   alerts and also post to the topic, so share it only with people you trust.

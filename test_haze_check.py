@@ -1,7 +1,14 @@
 import unittest
 from datetime import datetime, timezone
 
-from haze_check import format_time, is_current_hour, latest_reading, region_summary
+from haze_check import (
+    build_channels,
+    format_time,
+    is_current_hour,
+    latest_reading,
+    region_summary,
+    telegram_text,
+)
 
 SAMPLE = {
     "code": 0,
@@ -62,6 +69,32 @@ class MessageFormatTest(unittest.TestCase):
         self.assertEqual(format_time("2026-09-30T18:00:00+08:00"), "6pm")
         self.assertEqual(format_time("2026-09-30T00:00:00+08:00"), "12am")
         self.assertEqual(format_time("2026-09-30T12:00:00+08:00"), "12pm")
+
+
+class ChannelsTest(unittest.TestCase):
+    def test_ntfy_only(self):
+        names = [n for n, _ in build_channels({"NTFY_TOPIC": "t"})]
+        self.assertEqual(names, ["ntfy"])
+
+    def test_ntfy_and_multiple_telegram_chats(self):
+        names = [n for n, _ in build_channels({
+            "NTFY_TOPIC": "t",
+            "TELEGRAM_BOT_TOKEN": "tok",
+            "TELEGRAM_CHAT_ID": "123, -456",
+        })]
+        self.assertEqual(names, ["ntfy", "telegram:123", "telegram:-456"])
+
+    def test_half_configured_telegram_exits(self):
+        with self.assertRaises(SystemExit):
+            build_channels({"TELEGRAM_BOT_TOKEN": "tok"})
+
+    def test_nothing_configured(self):
+        self.assertEqual(build_channels({}), [])
+
+    def test_telegram_text_escapes_html(self):
+        text = telegram_text("Alert <1>", "a & b")
+        self.assertIn("<b>Alert &lt;1&gt;</b>", text)
+        self.assertIn("a &amp; b", text)
 
 
 class IsCurrentHourTest(unittest.TestCase):

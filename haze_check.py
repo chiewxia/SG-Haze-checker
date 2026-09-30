@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
-"""Check NEA haze readings for chosen regions and push an iPhone alert via ntfy.
+"""Check NEA haze readings for chosen regions and alert via ntfy and/or Telegram.
 
 Data is the same feed haze.gov.sg displays (NEA via data.gov.sg).
 Standard library only, so it runs anywhere Python 3.8+ exists.
 
 Config (environment variables):
-  NTFY_TOPIC   required  your private ntfy topic name
+  NTFY_TOPIC   your private ntfy topic name
+  TELEGRAM_BOT_TOKEN  token from @BotFather
+  TELEGRAM_CHAT_ID    chat/group ID(s) to message, comma-separated
+               (set NTFY_TOPIC, the Telegram pair, or both)
   REGIONS      default "west,central"  comma-separated regions to watch
                                 (west/east/central/north/south); alert if ANY
                                 is above the threshold
@@ -17,6 +20,7 @@ Config (environment variables):
                                 for NEA to publish this hour's reading
   POLL_SECONDS default 30       how often to retry while waiting
 """
+import html
 import json
 import os
 import sys
@@ -111,7 +115,7 @@ def fetch_fresh(url, metric_key, regions, stop_minute, poll_seconds):
         time.sleep(poll_seconds)
 
 
-def notify(server, topic, title, message, priority):
+def send_ntfy(server, topic, title, message, priority):
     req = urllib.request.Request(
         f"{server.rstrip('/')}/{topic}",
         data=message.encode("utf-8"),
@@ -126,11 +130,69 @@ def notify(server, topic, title, message, priority):
     urllib.request.urlopen(req, timeout=30).close()
 
 
+def telegram_text(title, message):
+    return (
+        f"<b>{html.escape(title)}</b>\n{html.escape(message)}\n\n"
+        '<a href="https://www.haze.gov.sg">haze.gov.sg</a>'
+    )
+
+
+def send_telegram(token, chat_id, title, message):
+    body = {
+        "chat_id": chat_id,
+        "text": telegram_text(title, message),
+        "parse_mode": "HTML",
+        "link_preview_options": {"is_disabled": True},
+    }
+    req = urllib.request.Request(
+        f"https://api.telegram.org/bot{token}/sendMessage",
+        data=json.dumps(body).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    urllib.request.urlopen(req, timeout=30).close()
+
+
+def build_channels(env):
+    """Return [(name, send(title, message, priority))] for each configured channel."""
+    channels = []
+    topic = env.get("NTFY_TOPIC", "").strip()
+    if topic:
+        server = env.get("NTFY_SERVER", "https://ntfy.sh")
+        channels.append(
+            ("ntfy", lambda t, m, p: send_ntfy(server, topic, t, m, p))
+        )
+    token = env.get("TELEGRAM_BOT_TOKEN", "").strip()
+    chat_ids = [c.strip() for c in env.get("TELEGRAM_CHAT_ID", "").split(",") if c.strip()]
+    if token and chat_ids:
+        for chat_id in chat_ids:
+            channels.append(
+                (f"telegram:{chat_id}",
+                 lambda t, m, p, c=chat_id: send_telegram(token, c, t, m))
+            )
+    elif token or chat_ids:
+        sys.exit("Set both TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID - see README.md")
+    return channels
+
+
+def notify(channels, title, message, priority):
+    """Send to every channel; one failing doesn't stop the others."""
+    failed = []
+    for name, send in channels:
+        try:
+            send(title, message, priority)
+            print(f"Sent via {name}.")
+        except Exception as e:  # noqa: BLE001 - report and carry on
+            print(f"Failed to send via {name}: {e}")
+            failed.append(name)
+    if failed:
+        sys.exit(f"Notification failed for: {', '.join(failed)}")
+
+
 def main():
-    topic = os.environ.get("NTFY_TOPIC", "").strip()
-    if not topic:
-        sys.exit("NTFY_TOPIC is not set - see README.md")
-    server = os.environ.get("NTFY_SERVER", "https://ntfy.sh")
+    channels = build_channels(os.environ)
+    if not channels:
+        sys.exit("No notification channel set (NTFY_TOPIC or Telegram) - see README.md")
     regions = [
         r.strip().lower()
         for r in os.environ.get("REGIONS", "west,central").split(",")
@@ -161,7 +223,7 @@ def main():
         levels = ", ".join(f"{r.title()} {all_regions[r]:g}" for r in high)
         verb = "is" if len(high) == 1 else "are"
         notify(
-            server, topic,
+            channels,
             title=f"Haze alert: {levels}",
             message=f"{' & '.join(r.title() for r in high)} {verb} above your limit of {threshold:g}.\n\n{details}",
             priority="high",
@@ -169,7 +231,7 @@ def main():
         print("Alert sent.")
     elif force:
         notify(
-            server, topic,
+            channels,
             title="Haze checker test",
             message=f"Setup works. Alerts fire when {' or '.join(r.title() for r in regions)} is above {threshold:g}.\n\n{details}",
             priority="default",
