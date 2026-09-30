@@ -37,8 +37,11 @@ def fetch(url):
         return json.load(resp)
 
 
+REGION_ORDER = ["north", "south", "east", "west", "central"]
+
+
 def latest_reading(payload, metric_key, region):
-    """Return (value, timestamp) for the region from a data.gov.sg PSI payload."""
+    """Return (value, timestamp, all_regions) from a data.gov.sg payload."""
     data = payload.get("data", payload)
     items = data.get("items") or []
     if not items:
@@ -50,8 +53,29 @@ def latest_reading(payload, metric_key, region):
             f"No {metric_key}/{region} in API response. "
             f"Got: {json.dumps(item)[:500]}"
         )
-    value = readings[metric_key][region]
-    return float(value), item.get("timestamp") or item.get("updatedTimestamp", "")
+    all_regions = {r: float(v) for r, v in readings[metric_key].items()}
+    ts = item.get("timestamp") or item.get("updatedTimestamp", "")
+    return all_regions[region], ts, all_regions
+
+
+def region_summary(all_regions, region, threshold):
+    """One line per region, your region first; ⚠️ marks any above the limit."""
+    others = [r for r in REGION_ORDER if r in all_regions and r != region]
+    others += sorted(r for r in all_regions if r not in REGION_ORDER and r != region)
+    lines = []
+    for r in [region] + others:
+        v = all_regions[r]
+        lines.append(f"{r.title()}: {v:g}{' ⚠️' if v > threshold else ''}")
+    return "\n".join(lines)
+
+
+def format_time(ts):
+    """'2026-09-30T18:00:00+08:00' -> '6pm'."""
+    try:
+        t = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    except (ValueError, AttributeError):
+        return ts
+    return f"{t.hour % 12 or 12}{'am' if t.hour < 12 else 'pm'}"
 
 
 def is_current_hour(ts, now=None):
@@ -75,11 +99,11 @@ def fetch_fresh(url, metric_key, region, stop_minute, poll_seconds):
     now = datetime.now(timezone.utc)
     deadline = now.replace(minute=0, second=0, microsecond=0).timestamp() + stop_minute * 60
     while True:
-        value, ts = latest_reading(fetch(url), metric_key, region)
+        value, ts, all_regions = latest_reading(fetch(url), metric_key, region)
         if is_current_hour(ts) or time.time() + poll_seconds > deadline:
             if not is_current_hour(ts):
                 print(f"This hour's reading isn't out yet; using latest ({ts}).")
-            return value, ts
+            return value, ts, all_regions
         print(f"Latest reading is {ts}; waiting for this hour's update...")
         time.sleep(poll_seconds)
 
@@ -115,15 +139,22 @@ def main():
         sys.exit(f"METRIC must be one of {list(METRICS)}")
     endpoint, key, label, unit = METRICS[metric]
 
-    value, ts = fetch_fresh(API_BASE + endpoint, key, region, stop_minute, poll_seconds)
+    value, ts, all_regions = fetch_fresh(
+        API_BASE + endpoint, key, region, stop_minute, poll_seconds
+    )
     reading = f"{value:g}{(' ' + unit) if unit else ''}"
+    when = format_time(ts)
+    details = f"{label} at {when}{(' (' + unit + ')') if unit else ''}:\n" + region_summary(
+        all_regions, region, threshold
+    )
     print(f"{region.title()} {label}: {reading} at {ts} (threshold {threshold:g})")
+    print(details)
 
     if value > threshold:
         notify(
             server, topic,
             title=f"Haze alert: {region.title()} {label} {value:g}",
-            message=f"{region.title()} {label} is {reading}, above your limit of {threshold:g}. ({ts})",
+            message=f"{region.title()} is {reading}, above your limit of {threshold:g}.\n\n{details}",
             priority="high",
         )
         print("Alert sent.")
@@ -131,7 +162,7 @@ def main():
         notify(
             server, topic,
             title="Haze checker test",
-            message=f"Setup works. {region.title()} {label} is {reading} (limit {threshold:g}).",
+            message=f"Setup works. Alerts fire above {threshold:g}.\n\n{details}",
             priority="default",
         )
         print("Test notification sent.")
