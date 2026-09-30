@@ -36,6 +36,10 @@ class LatestReadingTest(unittest.TestCase):
         value, _ = latest_reading(SAMPLE, "psi_twenty_four_hourly", "west")
         self.assertEqual(value, 52)
 
+    def test_missing_metric_raises_with_payload(self):
+        with self.assertRaisesRegex(ValueError, "psi_twenty_four_hourly"):
+            latest_reading(SAMPLE, "o3_sub_index", "west")
+
     def test_empty_items_raises(self):
         with self.assertRaises(ValueError):
             latest_reading({"data": {"items": []}}, "pm25_one_hourly", "west")

@@ -22,11 +22,12 @@ import time
 import urllib.request
 from datetime import datetime, timezone
 
-API_URL = "https://api-open.data.gov.sg/v2/real-time/api/psi"
+API_BASE = "https://api-open.data.gov.sg/v2/real-time/api/"
 
+# metric -> (API endpoint, reading key, label, unit)
 METRICS = {
-    "pm25": ("pm25_one_hourly", "1-hr PM2.5", "µg/m³"),
-    "psi": ("psi_twenty_four_hourly", "24-hr PSI", ""),
+    "pm25": ("pm25", "pm25_one_hourly", "1-hr PM2.5", "µg/m³"),
+    "psi": ("psi", "psi_twenty_four_hourly", "24-hr PSI", ""),
 }
 
 
@@ -43,7 +44,13 @@ def latest_reading(payload, metric_key, region):
     if not items:
         raise ValueError("API returned no readings")
     item = items[-1]
-    value = item["readings"][metric_key][region]
+    readings = item.get("readings", {})
+    if metric_key not in readings or region not in readings[metric_key]:
+        raise ValueError(
+            f"No {metric_key}/{region} in API response. "
+            f"Got: {json.dumps(item)[:500]}"
+        )
+    value = readings[metric_key][region]
     return float(value), item.get("timestamp") or item.get("updatedTimestamp", "")
 
 
@@ -58,7 +65,7 @@ def is_current_hour(ts, now=None):
     return reading_time >= now.replace(minute=0, second=0, microsecond=0)
 
 
-def fetch_fresh(metric_key, region, stop_minute, poll_seconds):
+def fetch_fresh(url, metric_key, region, stop_minute, poll_seconds):
     """Fetch the reading, retrying until this hour's value is published.
 
     Gives up at `stop_minute` past the hour and returns the latest reading.
@@ -68,7 +75,7 @@ def fetch_fresh(metric_key, region, stop_minute, poll_seconds):
     now = datetime.now(timezone.utc)
     deadline = now.replace(minute=0, second=0, microsecond=0).timestamp() + stop_minute * 60
     while True:
-        value, ts = latest_reading(fetch(API_URL), metric_key, region)
+        value, ts = latest_reading(fetch(url), metric_key, region)
         if is_current_hour(ts) or time.time() + poll_seconds > deadline:
             if not is_current_hour(ts):
                 print(f"This hour's reading isn't out yet; using latest ({ts}).")
@@ -106,9 +113,9 @@ def main():
 
     if metric not in METRICS:
         sys.exit(f"METRIC must be one of {list(METRICS)}")
-    key, label, unit = METRICS[metric]
+    endpoint, key, label, unit = METRICS[metric]
 
-    value, ts = fetch_fresh(key, region, stop_minute, poll_seconds)
+    value, ts = fetch_fresh(API_BASE + endpoint, key, region, stop_minute, poll_seconds)
     reading = f"{value:g}{(' ' + unit) if unit else ''}"
     print(f"{region.title()} {label}: {reading} at {ts} (threshold {threshold:g})")
 
