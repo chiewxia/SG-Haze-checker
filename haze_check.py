@@ -11,11 +11,15 @@ Config (environment variables):
   METRIC       default "pm25"   "pm25" = 1-hr PM2.5 (µg/m³), "psi" = 24-hr PSI
   NTFY_SERVER  default "https://ntfy.sh"
   FORCE_TEST   if "1", always send a notification (to check your setup)
+  MAX_WAIT     default 150      seconds to keep retrying until NEA publishes
+                                this hour's reading
 """
 import json
 import os
 import sys
+import time
 import urllib.request
+from datetime import datetime, timezone
 
 API_URL = "https://api-open.data.gov.sg/v2/real-time/api/psi"
 
@@ -42,6 +46,30 @@ def latest_reading(payload, metric_key, region):
     return float(value), item.get("timestamp") or item.get("updatedTimestamp", "")
 
 
+def is_current_hour(ts, now=None):
+    """True if the reading's timestamp is in the current clock hour."""
+    try:
+        reading_time = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    except (ValueError, AttributeError):
+        return False
+    now = now or datetime.now(timezone.utc)
+    # Singapore is a whole-hour offset from UTC, so flooring UTC works.
+    return reading_time >= now.replace(minute=0, second=0, microsecond=0)
+
+
+def fetch_fresh(metric_key, region, max_wait, retry_every=60):
+    """Fetch the reading, retrying until this hour's value is published."""
+    deadline = time.monotonic() + max_wait
+    while True:
+        value, ts = latest_reading(fetch(API_URL), metric_key, region)
+        if is_current_hour(ts) or time.monotonic() + retry_every > deadline:
+            if not is_current_hour(ts):
+                print(f"This hour's reading isn't out yet; using latest ({ts}).")
+            return value, ts
+        print(f"Latest reading is {ts}; waiting for this hour's update...")
+        time.sleep(retry_every)
+
+
 def notify(server, topic, title, message, priority):
     req = urllib.request.Request(
         f"{server.rstrip('/')}/{topic}",
@@ -66,12 +94,13 @@ def main():
     threshold = float(os.environ.get("THRESHOLD", "55"))
     metric = os.environ.get("METRIC", "pm25").strip().lower()
     force = os.environ.get("FORCE_TEST") == "1"
+    max_wait = float(os.environ.get("MAX_WAIT", "150"))
 
     if metric not in METRICS:
         sys.exit(f"METRIC must be one of {list(METRICS)}")
     key, label, unit = METRICS[metric]
 
-    value, ts = latest_reading(fetch(API_URL), key, region)
+    value, ts = fetch_fresh(key, region, max_wait)
     reading = f"{value:g}{(' ' + unit) if unit else ''}"
     print(f"{region.title()} {label}: {reading} at {ts} (threshold {threshold:g})")
 

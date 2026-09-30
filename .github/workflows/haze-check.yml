@@ -2,8 +2,10 @@ name: Hourly haze check
 
 on:
   schedule:
-    # Every hour at :15 (NEA publishes readings on the hour). Times are UTC.
-    - cron: "15 * * * *"
+    # NEA stamps readings on the hour and publishes a few minutes later.
+    # Run at :05; the script retries for up to ~2.5 min if the new reading
+    # isn't out yet. (Avoids :00, when GitHub's scheduler is most delayed.)
+    - cron: "5 * * * *"
   workflow_dispatch:
     inputs:
       test:
@@ -17,9 +19,6 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
       - name: Check haze and notify
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
@@ -28,4 +27,4 @@ jobs:
           THRESHOLD: ${{ vars.THRESHOLD || '55' }}
           METRIC: ${{ vars.METRIC || 'pm25' }}
           FORCE_TEST: ${{ github.event_name == 'workflow_dispatch' && inputs.test && '1' || '0' }}
-        run: python haze_check.py
+        run: python3 haze_check.py

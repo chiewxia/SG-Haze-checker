@@ -1,6 +1,7 @@
 import unittest
+from datetime import datetime, timezone
 
-from haze_check import latest_reading
+from haze_check import is_current_hour, latest_reading
 
 SAMPLE = {
     "code": 0,
@@ -38,6 +39,23 @@ class LatestReadingTest(unittest.TestCase):
     def test_empty_items_raises(self):
         with self.assertRaises(ValueError):
             latest_reading({"data": {"items": []}}, "pm25_one_hourly", "west")
+
+
+class IsCurrentHourTest(unittest.TestCase):
+    # 10:07 SGT == 02:07 UTC
+    NOW = datetime(2026, 9, 30, 2, 7, tzinfo=timezone.utc)
+
+    def test_this_hours_reading_is_fresh(self):
+        self.assertTrue(is_current_hour("2026-09-30T10:00:00+08:00", self.NOW))
+
+    def test_last_hours_reading_is_stale(self):
+        self.assertFalse(is_current_hour("2026-09-30T09:00:00+08:00", self.NOW))
+
+    def test_utc_z_suffix(self):
+        self.assertTrue(is_current_hour("2026-09-30T02:00:00Z", self.NOW))
+
+    def test_bad_timestamp_is_stale(self):
+        self.assertFalse(is_current_hour("", self.NOW))
 
 
 if __name__ == "__main__":

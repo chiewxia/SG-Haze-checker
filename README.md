@@ -22,7 +22,7 @@ any app open. Notifications come through the free **ntfy** app.
    (leave "Send a test notification" ticked). Your phone should buzz within a
    minute.
 
-That's it. It now checks every hour at :15.
+That's it. It now checks every hour, timed to NEA's hourly update (see below).
 
 ## Changing settings (optional)
 
@@ -41,12 +41,20 @@ Under **Settings → Secrets and variables → Actions → Variables**, add any 
 - **24-hr PSI.** 0–50 is "Good", 51–100 "Moderate". If you meant PSI 55, set
   `METRIC` to `psi`.
 
+## Timing
+
+NEA stamps each reading on the hour (e.g. 10:00) and publishes it a few
+minutes later. The check starts at **:05** and, if the new reading isn't out
+yet, retries every minute for up to ~2.5 minutes. If it's still not out, it
+uses the latest reading available (last hour's), so you never miss a check.
+
 ## Things to know
 
 - **You get an alert every hour while it stays above the limit**, not just once.
 - GitHub sometimes runs scheduled jobs 5–20 minutes late at busy times.
-- GitHub pauses scheduled jobs if the repo has no activity for 60 days. If
-  that happens, you'll get an email; click **Enable workflow** in the Actions tab.
+- This repo is private, so runs use your free 2,000 Actions minutes/month.
+  Each check is usually billed as 1 minute (~720/month), up to 3 when it has
+  to wait for NEA.
 - Tapping the notification opens haze.gov.sg.
 
 ## Run locally
