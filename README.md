@@ -1,11 +1,28 @@
-# SG Haze Checker – West 🌫️📱
+# SG Haze Checker – West & Central 🌫️📱
 
 Every hour this checks NEA's 1-hr PM2.5 readings (the same data haze.gov.sg
 shows) and sends a push notification to your iPhone when **West or Central**
-goes **above 55**. Each alert lists all five regions, with ⚠️ on any above 55.
+goes **above 55**.
 
 It runs free on GitHub Actions, so your phone doesn't need to be on or have
 any app open. Notifications come through the free **ntfy** app.
+
+## What an alert looks like
+
+```
+Haze alert: West 61, Central 58
+West & Central are above your limit of 55.
+
+1-hr PM2.5 at 7pm (µg/m³):
+West: 61 ⚠️
+Central: 58 ⚠️
+North: 70 ⚠️
+South: 11
+East: 9
+```
+
+Watched regions are listed first. ⚠️ marks any region above 55, but only the
+watched ones (West, Central) trigger an alert. Tapping it opens haze.gov.sg.
 
 ## Setup (about 5 minutes)
 
@@ -13,8 +30,8 @@ any app open. Notifications come through the free **ntfy** app.
    [ntfy from the App Store](https://apps.apple.com/app/ntfy/id1625396347),
    open it, allow notifications.
 2. **Pick a private topic name.** Tap **+** and subscribe to a topic name that's
-   hard to guess, e.g. `haze-west-8x2k-qz`. Anyone who knows the name can
-   see its messages, so don't use something like `haze`.
+   hard to guess, e.g. `haze-sg-8x2k-qz`. Anyone who knows the name can see
+   its messages, so don't use something like `haze`.
 3. **Tell GitHub your topic.** In this repo on GitHub, go to
    **Settings → Secrets and variables → Actions → New repository secret**.
    Name: `NTFY_TOPIC`, value: your topic name.
@@ -22,24 +39,35 @@ any app open. Notifications come through the free **ntfy** app.
    (leave "Send a test notification" ticked). Your phone should buzz within a
    minute.
 
-That's it. It now checks every hour, timed to NEA's hourly update (see below).
+   On a phone, the **Run workflow** button is hidden. Open the repo in Safari
+   and choose **aA → Request Desktop Website**, or use a computer.
+
+That's it. It checks every hour on its own; nothing else to run.
+
+## Sharing with others
+
+Anyone can get the same alerts: install ntfy → tap **+** → subscribe to your
+topic name → allow notifications.
+
+- The topic name works like a shared password. Anyone with it can read the
+  alerts and also post to the topic, so share it only with people you trust.
+- If it leaks, pick a new topic, update the `NTFY_TOPIC` secret, and send the
+  new name to the people you want to keep.
+- Everyone gets the same alerts. Someone who wants different regions or a
+  different threshold needs their own copy of this repo.
 
 ## Changing settings (optional)
 
 Under **Settings → Secrets and variables → Actions → Variables**, add any of:
 
-| Variable    | Default | Options                                              |
-|-------------|---------|------------------------------------------------------|
+| Variable    | Default        | Options                                                                          |
+|-------------|----------------|----------------------------------------------------------------------------------|
 | `REGIONS`   | `west,central` | comma-separated; any of `west`, `east`, `central`, `north`, `south`. Alerts if **any** is above the threshold |
-| `THRESHOLD` | `55`    | any number; alerts when the reading is **above** it  |
-| `METRIC`    | `pm25`  | `pm25` = 1-hr PM2.5 (µg/m³), `psi` = 24-hr PSI       |
+| `THRESHOLD` | `55`           | any number; alerts when a reading is **above** it                                 |
+| `METRIC`    | `pm25`         | `pm25` = 1-hr PM2.5 (µg/m³), `psi` = 24-hr PSI (not yet tested live; run a test after switching) |
 
-**Which number is "55"?** haze.gov.sg shows two numbers:
-
-- **1-hr PM2.5** (default here). NEA's "Normal" band is 0–55 µg/m³, and
-  56+ is "Elevated". So 55 is NEA's own cut-off for this one.
-- **24-hr PSI.** 0–50 is "Good", 51–100 "Moderate". If you meant PSI 55, set
-  `METRIC` to `psi`.
+**Why 55?** NEA's 1-hr PM2.5 "Normal" band is 0–55 µg/m³, and 56+ is
+"Elevated". So alerts fire as soon as air leaves NEA's Normal band.
 
 ## Timing
 
@@ -53,14 +81,14 @@ check.
 
 - **You get an alert every hour while it stays above the limit**, not just once.
 - GitHub sometimes runs scheduled jobs 5–20 minutes late at busy times.
-- **Actions minutes (private repos only).** Each run is billed by how long it
-  waits for NEA, rounded up to the minute: ~2 min if NEA publishes by :06,
-  ~3 min by :07. The free plan's 2,000 min/month covers about 2.7 min per
-  hourly run, so if NEA is regularly later than ~:06, you'll run out near the
-  end of the month (GitHub just stops the runs; it won't charge you). Making
-  the repo **public** removes the limit entirely; your ntfy topic stays
-  hidden because it's a secret.
-- Tapping the notification opens haze.gov.sg.
+- **Public repo:** unlimited free Actions minutes, but GitHub pauses scheduled
+  jobs after 60 days with no repo activity. You'll get an email; click
+  **Enable workflow** in the Actions tab.
+- **Private repo:** runs use your free 2,000 Actions minutes/month. Each run is
+  billed by how long it waits for NEA, rounded up to the minute (~2 min if NEA
+  publishes by :06, ~3 min by :07). If NEA is regularly slow you may run out
+  near month-end; GitHub just stops the runs and won't charge you.
+- **To stop it:** Actions → Hourly haze check → **⋯ → Disable workflow**.
 
 ## Run locally
 

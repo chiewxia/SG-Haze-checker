@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check NEA haze readings for one region and push an iPhone alert via ntfy.
+"""Check NEA haze readings for chosen regions and push an iPhone alert via ntfy.
 
 Data is the same feed haze.gov.sg displays (NEA via data.gov.sg).
 Standard library only, so it runs anywhere Python 3.8+ exists.
