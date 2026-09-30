@@ -138,6 +138,21 @@ variables above.
   groups (capped, and you're told). If the token leaks: @BotFather →
   `/revoke`, then update the secret.
 
+### Changing what the bot says
+
+All bot text lives in [`telegram_subs.py`](telegram_subs.py):
+
+| Text | Where |
+|---|---|
+| Profile blurb, and the intro shown before **Start** | `BOT_SHORT_DESCRIPTION`, `BOT_DESCRIPTION` |
+| Hints in the `/` command menu | `BOT_COMMANDS` |
+| `/help` reply | `help_text()` |
+| Welcome, `/stop`, `/settings` and change replies | `sync()` and `apply_command()` |
+
+After editing the first two rows, bump `COMMANDS_VERSION` by 1 so the next
+run pushes them to Telegram. Don't set them in @BotFather; the next version
+bump would overwrite them.
+
 ### Upkeep
 
 - GitHub pauses scheduled jobs after 60 days with no repo activity. You'll get

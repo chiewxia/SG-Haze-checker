@@ -97,17 +97,31 @@ def _command(text):
 SETTINGS_COMMANDS = ("/regions", "/addregion", "/removeregion", "/threshold", "/settings", "/help")
 CHANGE_COMMANDS = ("/regions", "/addregion", "/removeregion", "/threshold")
 ALL_REGIONS = ["north", "south", "east", "west", "central"]
+# Shown by Telegram itself, instantly, even though the bot only reads
+# messages at each hourly check. Edit these to change what people see.
 BOT_COMMANDS = [
-    ("settings", "Show this chat's alert settings"),
-    ("regions", "Set regions, e.g. /regions west central"),
-    ("addregion", "Add regions, e.g. /addregion north"),
-    ("removeregion", "Remove regions, e.g. /removeregion west"),
-    ("threshold", "Set alert level, e.g. /threshold 60"),
-    ("stop", "Stop haze alerts in this chat"),
-    ("start", "Start haze alerts in this chat"),
-    ("help", "How this bot works"),
+    ("settings", "Show this chat's settings (reply at next hourly check)"),
+    ("regions", "Set regions, e.g. /regions west central (applies next check)"),
+    ("addregion", "Add regions, e.g. /addregion north (applies next check)"),
+    ("removeregion", "Remove regions, e.g. /removeregion west (applies next check)"),
+    ("threshold", "Set alert level, e.g. /threshold 60 (applies next check)"),
+    ("stop", "Stop haze alerts in this chat (applies next check)"),
+    ("start", "Start haze alerts in this chat (applies next check)"),
+    ("help", "How this bot works (reply at next hourly check)"),
 ]
-COMMANDS_VERSION = 2
+BOT_SHORT_DESCRIPTION = (  # profile / share card, max 120 chars
+    "Hourly Singapore haze (PM2.5) alerts. Commands are processed at the "
+    "next hourly check."
+)
+BOT_DESCRIPTION = (  # shown in an empty chat before Start, max 512 chars
+    "🌫️ Hourly haze alerts for Singapore, using NEA's 1-hr PM2.5 readings.\n\n"
+    "Add me to a group, or tap Start, to get alerts when West or Central goes "
+    "above 55. Change this per chat with /regions, /addregion, /removeregion "
+    "and /threshold.\n\n"
+    "⏱ I check in once an hour, so replies and changes take effect at the "
+    "next hourly check (up to an hour)."
+)
+COMMANDS_VERSION = 3
 
 
 # --- per-chat settings -----------------------------------------------------
@@ -341,6 +355,8 @@ def sync(token, state_path, owner_chat_id, defaults, max_chats=None):
     if state.get("commands_version") != COMMANDS_VERSION:
         call(token, "setMyCommands",
              commands=[{"command": c, "description": d} for c, d in BOT_COMMANDS])
+        call(token, "setMyShortDescription", short_description=BOT_SHORT_DESCRIPTION)
+        call(token, "setMyDescription", description=BOT_DESCRIPTION)
         state["commands_version"] = COMMANDS_VERSION
     updates = call(
         token, "getUpdates",
