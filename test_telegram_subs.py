@@ -105,6 +105,25 @@ class SettingsTest(unittest.TestCase):
         self.assertEqual(tg.chat_settings(state, -100, DEFAULTS), (["east"], 70))
         self.assertEqual(tg.chat_settings(state, 42, DEFAULTS), (["west", "central"], 55))
 
+    def test_add_and_remove_regions(self):
+        state = {"offset": 0, "chats": {"42": {"type": "private"}}}
+        tg.apply_command(state, 42, "/addregion", "north, west", DEFAULTS)
+        self.assertEqual(tg.chat_settings(state, 42, DEFAULTS)[0], ["west", "central", "north"])
+        tg.apply_command(state, 42, "/removeregion", "west", DEFAULTS)
+        self.assertEqual(tg.chat_settings(state, 42, DEFAULTS)[0], ["central", "north"])
+
+    def test_cannot_remove_every_region(self):
+        state = {"offset": 0, "chats": {"42": {"type": "private"}}}
+        reply, change = tg.apply_command(state, 42, "/removeregion", "west central", DEFAULTS)
+        self.assertIn("at least one region", reply)
+        self.assertIsNone(change)
+        self.assertNotIn("regions", state["chats"]["42"])
+
+    def test_bad_add_shows_matching_example(self):
+        state = {"offset": 0, "chats": {"42": {"type": "private"}}}
+        reply, _ = tg.apply_command(state, 42, "/addregion", "", DEFAULTS)
+        self.assertIn("/addregion north", reply)
+
     def test_bad_input_changes_nothing(self):
         state = {"offset": 0, "chats": {"42": {"type": "private"}}}
         reply, change = tg.apply_command(state, 42, "/regions", "jurong", DEFAULTS)
@@ -151,14 +170,14 @@ class SyncTest(unittest.TestCase):
         return result, sent, calls
 
     def test_non_admin_cannot_change_group_settings(self):
-        state = {"offset": 0, "chats": {"-100": {"type": "group"}}, "commands_version": 1}
+        state = {"offset": 0, "chats": {"-100": {"type": "group"}}, "commands_version": 2}
         result, sent, _ = self.run_sync(
             [message_update(1, GROUP, "/regions east")], member_status="member", state=state)
         self.assertNotIn("regions", result["chats"]["-100"])
         self.assertIn("Only group admins", sent[0][1])
 
     def test_admin_can_change_group_settings_and_owner_is_told(self):
-        state = {"offset": 0, "chats": {"-100": {"type": "group"}}, "commands_version": 1}
+        state = {"offset": 0, "chats": {"-100": {"type": "group"}}, "commands_version": 2}
         result, sent, _ = self.run_sync(
             [message_update(1, GROUP, "/regions east")], member_status="administrator", state=state)
         self.assertEqual(result["chats"]["-100"]["regions"], ["east"])
@@ -166,8 +185,15 @@ class SyncTest(unittest.TestCase):
         self.assertEqual(sent[1][0], "999")
         self.assertIn("set regions to East", sent[1][1])
 
+    def test_non_admin_cannot_add_regions_either(self):
+        state = {"offset": 0, "chats": {"-100": {"type": "group"}}, "commands_version": 2}
+        result, sent, _ = self.run_sync(
+            [message_update(1, GROUP, "/addregion north")], state=state)
+        self.assertNotIn("regions", result["chats"]["-100"])
+        self.assertIn("Only group admins", sent[0][1])
+
     def test_private_chat_needs_no_admin_check(self):
-        state = {"offset": 0, "chats": {"42": {"type": "private"}}, "commands_version": 1}
+        state = {"offset": 0, "chats": {"42": {"type": "private"}}, "commands_version": 2}
         result, _, calls = self.run_sync([message_update(1, DM, "/threshold 60")], state=state)
         self.assertEqual(result["chats"]["42"]["threshold"], 60)
         self.assertNotIn("getChatMember", calls)

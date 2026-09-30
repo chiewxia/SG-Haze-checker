@@ -94,17 +94,20 @@ def _command(text):
     return parts[0].split("@")[0].lower(), (parts[1] if len(parts) > 1 else "")
 
 
-SETTINGS_COMMANDS = ("/regions", "/threshold", "/settings", "/help")
+SETTINGS_COMMANDS = ("/regions", "/addregion", "/removeregion", "/threshold", "/settings", "/help")
+CHANGE_COMMANDS = ("/regions", "/addregion", "/removeregion", "/threshold")
 ALL_REGIONS = ["north", "south", "east", "west", "central"]
 BOT_COMMANDS = [
     ("settings", "Show this chat's alert settings"),
-    ("regions", "Choose regions, e.g. /regions west central"),
+    ("regions", "Set regions, e.g. /regions west central"),
+    ("addregion", "Add regions, e.g. /addregion north"),
+    ("removeregion", "Remove regions, e.g. /removeregion west"),
     ("threshold", "Set alert level, e.g. /threshold 60"),
     ("stop", "Stop haze alerts in this chat"),
     ("start", "Start haze alerts in this chat"),
     ("help", "How this bot works"),
 ]
-COMMANDS_VERSION = 1
+COMMANDS_VERSION = 2
 
 
 # --- per-chat settings -----------------------------------------------------
@@ -159,12 +162,13 @@ def help_text(defaults):
         f"Checks NEA's {label} every hour and alerts this chat when your "
         "chosen regions go above your limit.\n\n"
         "/settings – show this chat's settings\n"
-        "/regions west central – choose regions (north, south, east, west, "
+        "/regions west central – set regions (north, south, east, west, "
         "central, or all)\n"
+        "/addregion north – add regions · /removeregion west – remove\n"
         f"/threshold 60 – alert level (NEA's Normal band ends at {defaults['threshold']:g})\n"
         "/stop – stop alerts · /start – resume\n\n"
-        "In groups, only admins can change settings. Replies can take up to "
-        "an hour, as the bot checks in hourly."
+        "Settings only affect this chat. In groups, only admins can change "
+        "them. Replies can take up to an hour, as the bot checks in hourly."
     )
 
 
@@ -181,10 +185,24 @@ def apply_command(state, chat_id, cmd, args, defaults):
         return help_text(defaults), None
     if cid not in chats:
         return "This chat isn't subscribed. Send /start first.", None
-    if cmd == "/regions":
-        regions, err = parse_regions(args)
+    if cmd in ("/regions", "/addregion", "/removeregion"):
+        given, err = parse_regions(args)
         if err:
+            example = {"/regions": "/regions west central",
+                       "/addregion": "/addregion north",
+                       "/removeregion": "/removeregion west"}[cmd]
+            err = err.replace("/regions west central", example)
             return f"{html.escape(err)}. Options: north, south, east, west, central, or all.", None
+        current, _ = chat_settings(state, cid, defaults)
+        if cmd == "/addregion":
+            regions = list(dict.fromkeys(current + given))
+        elif cmd == "/removeregion":
+            regions = [r for r in current if r not in given]
+            if not regions:
+                return ("A chat needs at least one region. Use /regions to pick "
+                        "others, or /stop to turn alerts off."), None
+        else:
+            regions = given
         chats[cid]["regions"] = regions
         change = "regions to " + ", ".join(r.title() for r in regions)
     elif cmd == "/threshold":
@@ -197,7 +215,7 @@ def apply_command(state, chat_id, cmd, args, defaults):
         regions, threshold = chat_settings(state, cid, defaults)
         return (
             f"⚙️ This chat gets {describe_settings(regions, threshold, label)}.\n"
-            "Change with /regions or /threshold."
+            "Change with /regions, /addregion, /removeregion or /threshold."
         ), None
     regions, threshold = chat_settings(state, cid, defaults)
     return f"✅ Updated: this chat now gets {describe_settings(regions, threshold, label)}.", change
@@ -349,7 +367,7 @@ def sync(token, state_path, owner_chat_id, defaults, max_chats=None):
         elif kind == "command":
             msg, cmd, args = extra
             try:
-                allowed = cmd not in ("/regions", "/threshold") or is_group_admin(token, msg)
+                allowed = cmd not in CHANGE_COMMANDS or is_group_admin(token, msg)
             except TelegramError as e:
                 print(f"Couldn't check admin status in a {chat.get('type')} chat: {e}")
                 allowed = False

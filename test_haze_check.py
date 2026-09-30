@@ -120,6 +120,42 @@ class ChannelsTest(unittest.TestCase):
         self.assertIn("a &amp; b", text)
 
 
+class NtfyUnaffectedByChatSettingsTest(unittest.TestCase):
+    def test_ntfy_uses_defaults_even_when_a_chat_customised(self):
+        import os
+        import tempfile
+        from datetime import timedelta
+        from unittest import mock
+
+        import haze_check
+        import telegram_subs
+
+        now = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+        ts = now.astimezone(timezone(timedelta(hours=8))).isoformat()
+        readings = {"west": 10, "central": 10, "north": 10, "south": 10, "east": 90}
+        ntfy_sent, tg_sent = [], []
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "s.json")
+            # One chat switched itself to East; ntfy should still follow West/Central.
+            telegram_subs.save_state(path, {"offset": 0, "commands_version": 2,
+                                            "chats": {"-100": {"type": "group", "regions": ["east"]}}})
+            env = {"NTFY_TOPIC": "t", "TELEGRAM_BOT_TOKEN": "tok", "TELEGRAM_STATE": path}
+
+            def fake_call(token, method, **p):
+                if method == "sendMessage":
+                    tg_sent.append(str(p["chat_id"]))
+                return [] if method == "getUpdates" else True
+
+            with mock.patch.dict(os.environ, env, clear=True), \
+                    mock.patch.object(haze_check, "fetch", lambda u: {"data": {"items": [
+                        {"timestamp": ts, "readings": {"pm25_one_hourly": readings}}]}}), \
+                    mock.patch.object(haze_check, "send_ntfy", lambda *a: ntfy_sent.append(a)), \
+                    mock.patch.object(telegram_subs, "call", fake_call):
+                haze_check.main()
+        self.assertEqual(tg_sent, ["-100"])  # the East chat is alerted
+        self.assertEqual(ntfy_sent, [])  # ntfy (West/Central) is not
+
+
 class IsCurrentHourTest(unittest.TestCase):
     # 10:07 SGT == 02:07 UTC
     NOW = datetime(2026, 9, 30, 2, 7, tzinfo=timezone.utc)

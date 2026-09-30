@@ -17,16 +17,21 @@ That's it. The group is subscribed automatically.
 ### Choose your regions and alert level
 
 Each chat has its own settings. The default is **West or Central above 55**.
+Changing them only affects **your** chat. Other groups and the maintainer's
+own alerts stay as they are.
 
 | Command | What it does |
 |---|---|
 | `/settings` | show this chat's settings |
-| `/regions west east` | alert for these regions (`north`, `south`, `east`, `west`, `central`, or `all`) |
+| `/regions west central north` | set the regions to exactly these (`north`, `south`, `east`, `west`, `central`, or `all`) |
+| `/addregion north` | add one or more regions, keeping the ones you have |
+| `/removeregion west` | remove one or more regions (at least one must stay) |
 | `/threshold 60` | alert when a chosen region goes above this number |
 | `/stop` · `/start` | turn alerts off / back on (your settings are kept while subscribed) |
 | `/help` | quick guide |
 
-- In groups, **only group admins** can change `/regions` and `/threshold`.
+- In groups, **only group admins** can change regions or the threshold.
+  Anyone can use `/settings` and `/help`.
 - Tap `/` in the chat to pick from the command menu. If the bot doesn't
   respond in a busy group, add its name: `/settings@sg_haze_checker_bot`.
 - The bot checks in once an hour, so replies (and the welcome message) can
@@ -93,8 +98,12 @@ Settings → Secrets and variables → Actions → **Variables** tab:
 
 | Variable | Default | Options |
 |---|---|---|
-| `REGIONS` | `west,central` | default for new Telegram chats and for ntfy; comma-separated; any of `west`, `east`, `central`, `north`, `south`. Alerts if **any** is above the threshold |
-| `THRESHOLD` | `55` | default alert level for new Telegram chats and for ntfy |
+| `REGIONS` | `west,central` | used by ntfy and by Telegram chats that haven't picked their own; comma-separated; any of `west`, `east`, `central`, `north`, `south`. Alerts if **any** is above the threshold |
+| `THRESHOLD` | `55` | used by ntfy and by Telegram chats that haven't set their own |
+
+**Telegram commands never change ntfy.** A group's `/regions` or `/threshold`
+only affects that group's Telegram alerts. ntfy always follows the two
+variables above.
 | `METRIC` | `pm25` | `pm25` = 1-hr PM2.5 (µg/m³), `psi` = 24-hr PSI (not yet tested live; run a test after switching) |
 | `TELEGRAM_MAX_CHATS` | `50` | new groups beyond this are turned away (you get a ⛔ report) |
 
