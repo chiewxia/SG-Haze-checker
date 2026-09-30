@@ -23,7 +23,7 @@ jobs:
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           # Edit these in Settings > Secrets and variables > Actions > Variables
-          REGION: ${{ vars.REGION || 'west' }}
+          REGIONS: ${{ vars.REGIONS || 'west,central' }}
           THRESHOLD: ${{ vars.THRESHOLD || '55' }}
           METRIC: ${{ vars.METRIC || 'pm25' }}
           FORCE_TEST: ${{ github.event_name == 'workflow_dispatch' && inputs.test && '1' || '0' }}

@@ -6,7 +6,9 @@ Standard library only, so it runs anywhere Python 3.8+ exists.
 
 Config (environment variables):
   NTFY_TOPIC   required  your private ntfy topic name
-  REGION       default "west"   one of west/east/central/north/south
+  REGIONS      default "west,central"  comma-separated regions to watch
+                                (west/east/central/north/south); alert if ANY
+                                is above the threshold
   THRESHOLD    default 55       alert when the reading is ABOVE this
   METRIC       default "pm25"   "pm25" = 1-hr PM2.5 (µg/m³), "psi" = 24-hr PSI
   NTFY_SERVER  default "https://ntfy.sh"
@@ -40,30 +42,31 @@ def fetch(url):
 REGION_ORDER = ["north", "south", "east", "west", "central"]
 
 
-def latest_reading(payload, metric_key, region):
-    """Return (value, timestamp, all_regions) from a data.gov.sg payload."""
+def latest_reading(payload, metric_key, regions):
+    """Return (timestamp, all_regions) from a data.gov.sg payload."""
     data = payload.get("data", payload)
     items = data.get("items") or []
     if not items:
         raise ValueError("API returned no readings")
     item = items[-1]
     readings = item.get("readings", {})
-    if metric_key not in readings or region not in readings[metric_key]:
+    missing = [r for r in regions if r not in readings.get(metric_key, {})]
+    if missing:
         raise ValueError(
-            f"No {metric_key}/{region} in API response. "
+            f"No {metric_key}/{','.join(missing)} in API response. "
             f"Got: {json.dumps(item)[:500]}"
         )
     all_regions = {r: float(v) for r, v in readings[metric_key].items()}
     ts = item.get("timestamp") or item.get("updatedTimestamp", "")
-    return all_regions[region], ts, all_regions
+    return ts, all_regions
 
 
-def region_summary(all_regions, region, threshold):
-    """One line per region, your region first; ⚠️ marks any above the limit."""
-    others = [r for r in REGION_ORDER if r in all_regions and r != region]
-    others += sorted(r for r in all_regions if r not in REGION_ORDER and r != region)
+def region_summary(all_regions, regions, threshold):
+    """One line per region, watched ones first; ⚠️ marks any above the limit."""
+    others = [r for r in REGION_ORDER if r in all_regions and r not in regions]
+    others += sorted(r for r in all_regions if r not in REGION_ORDER and r not in regions)
     lines = []
-    for r in [region] + others:
+    for r in list(regions) + others:
         v = all_regions[r]
         lines.append(f"{r.title()}: {v:g}{' ⚠️' if v > threshold else ''}")
     return "\n".join(lines)
@@ -89,7 +92,7 @@ def is_current_hour(ts, now=None):
     return reading_time >= now.replace(minute=0, second=0, microsecond=0)
 
 
-def fetch_fresh(url, metric_key, region, stop_minute, poll_seconds):
+def fetch_fresh(url, metric_key, regions, stop_minute, poll_seconds):
     """Fetch the reading, retrying until this hour's value is published.
 
     Gives up at `stop_minute` past the hour and returns the latest reading.
@@ -99,11 +102,11 @@ def fetch_fresh(url, metric_key, region, stop_minute, poll_seconds):
     now = datetime.now(timezone.utc)
     deadline = now.replace(minute=0, second=0, microsecond=0).timestamp() + stop_minute * 60
     while True:
-        value, ts, all_regions = latest_reading(fetch(url), metric_key, region)
+        ts, all_regions = latest_reading(fetch(url), metric_key, regions)
         if is_current_hour(ts) or time.time() + poll_seconds > deadline:
             if not is_current_hour(ts):
                 print(f"This hour's reading isn't out yet; using latest ({ts}).")
-            return value, ts, all_regions
+            return ts, all_regions
         print(f"Latest reading is {ts}; waiting for this hour's update...")
         time.sleep(poll_seconds)
 
@@ -128,7 +131,11 @@ def main():
     if not topic:
         sys.exit("NTFY_TOPIC is not set - see README.md")
     server = os.environ.get("NTFY_SERVER", "https://ntfy.sh")
-    region = os.environ.get("REGION", "west").strip().lower()
+    regions = [
+        r.strip().lower()
+        for r in os.environ.get("REGIONS", "west,central").split(",")
+        if r.strip()
+    ]
     threshold = float(os.environ.get("THRESHOLD", "55"))
     metric = os.environ.get("METRIC", "pm25").strip().lower()
     force = os.environ.get("FORCE_TEST") == "1"
@@ -139,22 +146,24 @@ def main():
         sys.exit(f"METRIC must be one of {list(METRICS)}")
     endpoint, key, label, unit = METRICS[metric]
 
-    value, ts, all_regions = fetch_fresh(
-        API_BASE + endpoint, key, region, stop_minute, poll_seconds
+    ts, all_regions = fetch_fresh(
+        API_BASE + endpoint, key, regions, stop_minute, poll_seconds
     )
-    reading = f"{value:g}{(' ' + unit) if unit else ''}"
     when = format_time(ts)
     details = f"{label} at {when}{(' (' + unit + ')') if unit else ''}:\n" + region_summary(
-        all_regions, region, threshold
+        all_regions, regions, threshold
     )
-    print(f"{region.title()} {label}: {reading} at {ts} (threshold {threshold:g})")
+    print(f"Watching {', '.join(regions)} above {threshold:g} ({ts})")
     print(details)
 
-    if value > threshold:
+    high = [r for r in regions if all_regions[r] > threshold]
+    if high:
+        levels = ", ".join(f"{r.title()} {all_regions[r]:g}" for r in high)
+        verb = "is" if len(high) == 1 else "are"
         notify(
             server, topic,
-            title=f"Haze alert: {region.title()} {label} {value:g}",
-            message=f"{region.title()} is {reading}, above your limit of {threshold:g}.\n\n{details}",
+            title=f"Haze alert: {levels}",
+            message=f"{' & '.join(r.title() for r in high)} {verb} above your limit of {threshold:g}.\n\n{details}",
             priority="high",
         )
         print("Alert sent.")
@@ -162,7 +171,7 @@ def main():
         notify(
             server, topic,
             title="Haze checker test",
-            message=f"Setup works. Alerts fire above {threshold:g}.\n\n{details}",
+            message=f"Setup works. Alerts fire when {' or '.join(r.title() for r in regions)} is above {threshold:g}.\n\n{details}",
             priority="default",
         )
         print("Test notification sent.")

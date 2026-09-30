@@ -1,8 +1,8 @@
 # SG Haze Checker – West 🌫️📱
 
-Every hour this checks the NEA haze reading for **West Singapore** (the same
-data haze.gov.sg shows) and sends a push notification to your iPhone when it
-goes **above 55**.
+Every hour this checks NEA's 1-hr PM2.5 readings (the same data haze.gov.sg
+shows) and sends a push notification to your iPhone when **West or Central**
+goes **above 55**. Each alert lists all five regions, with ⚠️ on any above 55.
 
 It runs free on GitHub Actions, so your phone doesn't need to be on or have
 any app open. Notifications come through the free **ntfy** app.
@@ -30,7 +30,7 @@ Under **Settings → Secrets and variables → Actions → Variables**, add any 
 
 | Variable    | Default | Options                                              |
 |-------------|---------|------------------------------------------------------|
-| `REGION`    | `west`  | `west`, `east`, `central`, `north`, `south`          |
+| `REGIONS`   | `west,central` | comma-separated; any of `west`, `east`, `central`, `north`, `south`. Alerts if **any** is above the threshold |
 | `THRESHOLD` | `55`    | any number; alerts when the reading is **above** it  |
 | `METRIC`    | `pm25`  | `pm25` = 1-hr PM2.5 (µg/m³), `psi` = 24-hr PSI       |
 

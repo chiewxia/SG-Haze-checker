@@ -28,32 +28,34 @@ SAMPLE = {
 
 class LatestReadingTest(unittest.TestCase):
     def test_uses_latest_item(self):
-        value, ts, all_regions = latest_reading(SAMPLE, "pm25_one_hourly", "west")
-        self.assertEqual(value, 61)
+        ts, all_regions = latest_reading(SAMPLE, "pm25_one_hourly", ["west", "central"])
+        self.assertEqual(all_regions["west"], 61)
         self.assertEqual(ts, "2026-09-30T10:00:00+08:00")
         self.assertEqual(all_regions["east"], 9)
 
     def test_psi_metric(self):
-        value, _, _ = latest_reading(SAMPLE, "psi_twenty_four_hourly", "west")
-        self.assertEqual(value, 52)
+        _, all_regions = latest_reading(SAMPLE, "psi_twenty_four_hourly", ["west"])
+        self.assertEqual(all_regions["west"], 52)
 
     def test_missing_metric_raises_with_payload(self):
         with self.assertRaisesRegex(ValueError, "psi_twenty_four_hourly"):
-            latest_reading(SAMPLE, "o3_sub_index", "west")
+            latest_reading(SAMPLE, "o3_sub_index", ["west"])
 
     def test_empty_items_raises(self):
         with self.assertRaises(ValueError):
-            latest_reading({"data": {"items": []}}, "pm25_one_hourly", "west")
+            latest_reading({"data": {"items": []}}, "pm25_one_hourly", ["west"])
 
 
 class MessageFormatTest(unittest.TestCase):
-    def test_region_summary_puts_your_region_first_and_flags_high(self):
+    def test_region_summary_puts_watched_regions_first_and_flags_high(self):
         text = region_summary(
-            {"west": 61, "east": 9, "central": 10, "north": 58, "south": 11}, "west", 55
+            {"west": 61, "east": 9, "central": 10, "north": 58, "south": 11},
+            ["west", "central"],
+            55,
         )
         self.assertEqual(
             text.splitlines(),
-            ["West: 61 ⚠️", "North: 58 ⚠️", "South: 11", "East: 9", "Central: 10"],
+            ["West: 61 ⚠️", "Central: 10", "North: 58 ⚠️", "South: 11", "East: 9"],
         )
 
     def test_format_time(self):
