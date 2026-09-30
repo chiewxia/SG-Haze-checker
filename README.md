@@ -1,4 +1,4 @@
-# Haze Checker 🌫️📱
+# SG Haze Checker – West 🌫️📱
 
 Every hour this checks the NEA haze reading for **West Singapore** (the same
 data haze.gov.sg shows) and sends a push notification to your iPhone when it
