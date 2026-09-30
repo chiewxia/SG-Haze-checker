@@ -44,17 +44,22 @@ Under **Settings → Secrets and variables → Actions → Variables**, add any 
 ## Timing
 
 NEA stamps each reading on the hour (e.g. 10:00) and publishes it a few
-minutes later. The check starts at **:05** and, if the new reading isn't out
-yet, retries every minute for up to ~2.5 minutes. If it's still not out, it
-uses the latest reading available (last hour's), so you never miss a check.
+minutes later. The check starts at **:05** and retries every 30 seconds until
+**:15**, stopping the moment the new reading appears. If it's still not out by
+:15, it uses the latest reading available (last hour's), so you never miss a
+check.
 
 ## Things to know
 
 - **You get an alert every hour while it stays above the limit**, not just once.
 - GitHub sometimes runs scheduled jobs 5–20 minutes late at busy times.
-- This repo is private, so runs use your free 2,000 Actions minutes/month.
-  Each check is usually billed as 1 minute (~720/month), up to 3 when it has
-  to wait for NEA.
+- **Actions minutes (private repos only).** Each run is billed by how long it
+  waits for NEA, rounded up to the minute: ~2 min if NEA publishes by :06,
+  ~3 min by :07. The free plan's 2,000 min/month covers about 2.7 min per
+  hourly run, so if NEA is regularly later than ~:06, you'll run out near the
+  end of the month (GitHub just stops the runs; it won't charge you). Making
+  the repo **public** removes the limit entirely; your ntfy topic stays
+  hidden because it's a secret.
 - Tapping the notification opens haze.gov.sg.
 
 ## Run locally

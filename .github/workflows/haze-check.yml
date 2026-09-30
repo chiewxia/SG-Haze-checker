@@ -3,8 +3,8 @@ name: Hourly haze check
 on:
   schedule:
     # NEA stamps readings on the hour and publishes a few minutes later.
-    # Run at :05; the script retries for up to ~2.5 min if the new reading
-    # isn't out yet. (Avoids :00, when GitHub's scheduler is most delayed.)
+    # Run at :05; the script retries every 30s until :15 and stops as soon as
+    # the new reading is out. (Avoids :00, when GitHub's scheduler is busiest.)
     - cron: "5 * * * *"
   workflow_dispatch:
     inputs:
@@ -16,7 +16,7 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 14
     steps:
       - uses: actions/checkout@v4
       - name: Check haze and notify

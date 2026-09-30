@@ -11,8 +11,9 @@ Config (environment variables):
   METRIC       default "pm25"   "pm25" = 1-hr PM2.5 (µg/m³), "psi" = 24-hr PSI
   NTFY_SERVER  default "https://ntfy.sh"
   FORCE_TEST   if "1", always send a notification (to check your setup)
-  MAX_WAIT     default 150      seconds to keep retrying until NEA publishes
-                                this hour's reading
+  STOP_MINUTE  default 15       keep retrying until this minute past the hour
+                                for NEA to publish this hour's reading
+  POLL_SECONDS default 30       how often to retry while waiting
 """
 import json
 import os
@@ -57,17 +58,23 @@ def is_current_hour(ts, now=None):
     return reading_time >= now.replace(minute=0, second=0, microsecond=0)
 
 
-def fetch_fresh(metric_key, region, max_wait, retry_every=60):
-    """Fetch the reading, retrying until this hour's value is published."""
-    deadline = time.monotonic() + max_wait
+def fetch_fresh(metric_key, region, stop_minute, poll_seconds):
+    """Fetch the reading, retrying until this hour's value is published.
+
+    Gives up at `stop_minute` past the hour and returns the latest reading.
+    Returns as soon as the fresh reading appears, so the job (and the Actions
+    minutes it bills) only runs as long as NEA takes to publish.
+    """
+    now = datetime.now(timezone.utc)
+    deadline = now.replace(minute=0, second=0, microsecond=0).timestamp() + stop_minute * 60
     while True:
         value, ts = latest_reading(fetch(API_URL), metric_key, region)
-        if is_current_hour(ts) or time.monotonic() + retry_every > deadline:
+        if is_current_hour(ts) or time.time() + poll_seconds > deadline:
             if not is_current_hour(ts):
                 print(f"This hour's reading isn't out yet; using latest ({ts}).")
             return value, ts
         print(f"Latest reading is {ts}; waiting for this hour's update...")
-        time.sleep(retry_every)
+        time.sleep(poll_seconds)
 
 
 def notify(server, topic, title, message, priority):
@@ -94,13 +101,14 @@ def main():
     threshold = float(os.environ.get("THRESHOLD", "55"))
     metric = os.environ.get("METRIC", "pm25").strip().lower()
     force = os.environ.get("FORCE_TEST") == "1"
-    max_wait = float(os.environ.get("MAX_WAIT", "150"))
+    stop_minute = int(os.environ.get("STOP_MINUTE", "15"))
+    poll_seconds = float(os.environ.get("POLL_SECONDS", "30"))
 
     if metric not in METRICS:
         sys.exit(f"METRIC must be one of {list(METRICS)}")
     key, label, unit = METRICS[metric]
 
-    value, ts = fetch_fresh(key, region, max_wait)
+    value, ts = fetch_fresh(key, region, stop_minute, poll_seconds)
     reading = f"{value:g}{(' ' + unit) if unit else ''}"
     print(f"{region.title()} {label}: {reading} at {ts} (threshold {threshold:g})")
 
