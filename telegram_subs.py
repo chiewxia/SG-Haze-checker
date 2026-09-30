@@ -113,15 +113,19 @@ BOT_SHORT_DESCRIPTION = (  # profile / share card, max 120 chars
     "Hourly Singapore haze (PM2.5) alerts. Commands are processed at the "
     "next hourly check."
 )
-BOT_DESCRIPTION = (  # shown in an empty chat before Start, max 512 chars
-    "🌫️ Hourly haze alerts for Singapore, using NEA's 1-hr PM2.5 readings.\n\n"
-    "Add me to a group, or tap Start, to get alerts when West or Central goes "
-    "above 40. Change this per chat with /regions, /addregion, /removeregion "
-    "and /threshold.\n\n"
-    "⏱ I check in once an hour, so replies and changes take effect at the "
-    "next hourly check (up to an hour)."
+BOT_DESCRIPTION = (  # "What can this bot do?" / bot profile, max 512 chars
+    "🌫️ Hourly Singapore haze alerts (NEA 1-hr PM2.5). Default: West or "
+    "Central above 40.\n\n"
+    "Commands:\n"
+    "/settings – show this chat's settings\n"
+    "/regions west central – set regions (north, south, east, west, central, all)\n"
+    "/addregion north · /removeregion west\n"
+    "/threshold 60 – alert level\n"
+    "/stop · /start – alerts off / on\n\n"
+    "Only group admins can change settings. ⏱ I check in hourly, so replies "
+    "and changes apply at the next check."
 )
-COMMANDS_VERSION = 4
+COMMANDS_VERSION = 5
 
 
 # --- per-chat settings -----------------------------------------------------

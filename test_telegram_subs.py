@@ -170,14 +170,14 @@ class SyncTest(unittest.TestCase):
         return result, sent, calls
 
     def test_non_admin_cannot_change_group_settings(self):
-        state = {"offset": 0, "chats": {"-100": {"type": "group"}}, "commands_version": 3}
+        state = {"offset": 0, "chats": {"-100": {"type": "group"}}, "commands_version": 5}
         result, sent, _ = self.run_sync(
             [message_update(1, GROUP, "/regions east")], member_status="member", state=state)
         self.assertNotIn("regions", result["chats"]["-100"])
         self.assertIn("Only group admins", sent[0][1])
 
     def test_admin_can_change_group_settings_and_owner_is_told(self):
-        state = {"offset": 0, "chats": {"-100": {"type": "group"}}, "commands_version": 3}
+        state = {"offset": 0, "chats": {"-100": {"type": "group"}}, "commands_version": 5}
         result, sent, _ = self.run_sync(
             [message_update(1, GROUP, "/regions east")], member_status="administrator", state=state)
         self.assertEqual(result["chats"]["-100"]["regions"], ["east"])
@@ -186,14 +186,14 @@ class SyncTest(unittest.TestCase):
         self.assertIn("set regions to East", sent[1][1])
 
     def test_non_admin_cannot_add_regions_either(self):
-        state = {"offset": 0, "chats": {"-100": {"type": "group"}}, "commands_version": 3}
+        state = {"offset": 0, "chats": {"-100": {"type": "group"}}, "commands_version": 5}
         result, sent, _ = self.run_sync(
             [message_update(1, GROUP, "/addregion north")], state=state)
         self.assertNotIn("regions", result["chats"]["-100"])
         self.assertIn("Only group admins", sent[0][1])
 
     def test_private_chat_needs_no_admin_check(self):
-        state = {"offset": 0, "chats": {"42": {"type": "private"}}, "commands_version": 3}
+        state = {"offset": 0, "chats": {"42": {"type": "private"}}, "commands_version": 5}
         result, _, calls = self.run_sync([message_update(1, DM, "/threshold 60")], state=state)
         self.assertEqual(result["chats"]["42"]["threshold"], 60)
         self.assertNotIn("getChatMember", calls)
