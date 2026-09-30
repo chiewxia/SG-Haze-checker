@@ -17,8 +17,10 @@ Config (environment variables):
                (set NTFY_TOPIC, TELEGRAM_BOT_TOKEN, or both)
   REGIONS      default "west,central"  comma-separated regions to watch
                                 (west/east/central/north/south); alert if ANY
-                                is above the threshold
+                                is above the threshold. Telegram chats can
+                                override with /regions.
   THRESHOLD    default 55       alert when the reading is ABOVE this
+                                (Telegram chats can override with /threshold)
   METRIC       default "pm25"   "pm25" = 1-hr PM2.5 (µg/m³), "psi" = 24-hr PSI
   NTFY_SERVER  default "https://ntfy.sh"
   FORCE_TEST   if "1", always send a notification (to check your setup)
@@ -82,6 +84,25 @@ def region_summary(all_regions, regions, threshold):
         v = all_regions[r]
         lines.append(f"{r.title()}: {v:g}{' ⚠️' if v > threshold else ''}")
     return "\n".join(lines)
+
+
+def make_alert(all_regions, regions, threshold, label, unit, when):
+    """(title, message) if any watched region is above threshold, else None."""
+    high = [r for r in regions if all_regions.get(r, 0) > threshold]
+    if not high:
+        return None
+    levels = ", ".join(f"{r.title()} {all_regions[r]:g}" for r in high)
+    verb = "is" if len(high) == 1 else "are"
+    return (
+        f"Haze alert: {levels}",
+        f"{' & '.join(r.title() for r in high)} {verb} above your limit of {threshold:g}."
+        f"\n\n{details_text(all_regions, regions, threshold, label, unit, when)}",
+    )
+
+
+def details_text(all_regions, regions, threshold, label, unit, when):
+    header = f"{label} at {when}{(' (' + unit + ')') if unit else ''}:\n"
+    return header + region_summary(all_regions, [r for r in regions if r in all_regions], threshold)
 
 
 def format_time(ts):
@@ -153,6 +174,7 @@ class TelegramChannel:
     """
 
     def __init__(self, token, chat_ids, owner_chat_id, state_path, max_chats):
+        self.defaults = None  # set by sync()
         self.token = token
         self.max_chats = max_chats
         self.chat_ids = chat_ids
@@ -161,10 +183,27 @@ class TelegramChannel:
         self.state = telegram_subs.load_state(state_path)
         self.test_mode = False
 
-    def sync(self, welcome):
+    def sync(self, defaults):
+        self.defaults = defaults
         self.state = telegram_subs.sync(
-            self.token, self.state_path, self.owner_chat_id, welcome, self.max_chats
+            self.token, self.state_path, self.owner_chat_id, defaults, self.max_chats
         )
+
+    def send_alerts(self, build_alert):
+        """Alert each chat using its own regions/threshold.
+
+        build_alert(regions, threshold) -> (title, message) or None.
+        """
+        def text_for(cid):
+            regions, threshold = telegram_subs.chat_settings(self.state, cid, self.defaults)
+            alert = build_alert(regions, threshold)
+            return telegram_text(*alert) if alert else None
+
+        failed = telegram_subs.broadcast(
+            self.token, self.state, self.state_path, self.chat_ids, text_for
+        )
+        if failed:
+            raise RuntimeError(f"{failed} Telegram chat(s) failed")
 
     def __call__(self, title, message, priority):
         if self.test_mode:
@@ -208,11 +247,16 @@ def build_channels(env):
 
 
 def notify(channels, title, message, priority):
-    """Send to every channel; one failing doesn't stop the others."""
+    """Send the same message to every channel."""
+    run_sends([(name, lambda s=send: s(title, message, priority)) for name, send in channels])
+
+
+def run_sends(sends):
+    """Run each (name, send) ; one failing doesn't stop the others."""
     failed = []
-    for name, send in channels:
+    for name, send in sends:
         try:
-            send(title, message, priority)
+            send()
             print(f"Sent via {name}.")
         except Exception as e:  # noqa: BLE001 - report and carry on
             print(f"Failed to send via {name}: {e}")
@@ -245,37 +289,21 @@ def main():
     sync_failed = False
     if telegram:
         try:
-            telegram.sync(
-                f"👋 This chat will get haze alerts when {watched} {label} "
-                f"goes above {threshold:g} (checked hourly, data from NEA).\n"
-                "Send /stop to turn them off."
-            )
+            telegram.sync({"regions": regions, "threshold": threshold, "label": label})
         except Exception as e:  # noqa: BLE001 - still send alerts to known chats
             print(f"Telegram sync failed: {e}")
             sync_failed = True
+            telegram.defaults = {"regions": regions, "threshold": threshold, "label": label}
 
     ts, all_regions = fetch_fresh(
         API_BASE + endpoint, key, regions, stop_minute, poll_seconds
     )
     when = format_time(ts)
-    details = f"{label} at {when}{(' (' + unit + ')') if unit else ''}:\n" + region_summary(
-        all_regions, regions, threshold
-    )
-    print(f"Watching {', '.join(regions)} above {threshold:g} ({ts})")
+    details = details_text(all_regions, regions, threshold, label, unit, when)
+    print(f"Default: watching {', '.join(regions)} above {threshold:g} ({ts})")
     print(details)
 
-    high = [r for r in regions if all_regions[r] > threshold]
-    if high:
-        levels = ", ".join(f"{r.title()} {all_regions[r]:g}" for r in high)
-        verb = "is" if len(high) == 1 else "are"
-        notify(
-            channels,
-            title=f"Haze alert: {levels}",
-            message=f"{' & '.join(r.title() for r in high)} {verb} above your limit of {threshold:g}.\n\n{details}",
-            priority="high",
-        )
-        print("Alert sent.")
-    elif force:
+    if force:
         if telegram:
             telegram.test_mode = True
         notify(
@@ -285,6 +313,18 @@ def main():
             priority="default",
         )
         print("Test notification sent.")
+    else:
+        def build(regs, thr):
+            return make_alert(all_regions, regs, thr, label, unit, when)
+
+        sends = []
+        default_alert = build(regions, threshold)
+        ntfy = dict(channels).get("ntfy")
+        if ntfy and default_alert:
+            sends.append(("ntfy", lambda: ntfy(*default_alert, "high")))
+        if telegram:
+            sends.append(("telegram", lambda: telegram.send_alerts(build)))
+        run_sends(sends)
 
     if sync_failed:
         sys.exit("Telegram subscriber sync failed (see above)")

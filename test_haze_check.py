@@ -6,6 +6,7 @@ from haze_check import (
     format_time,
     is_current_hour,
     latest_reading,
+    make_alert,
     region_summary,
     telegram_text,
 )
@@ -69,6 +70,20 @@ class MessageFormatTest(unittest.TestCase):
         self.assertEqual(format_time("2026-09-30T18:00:00+08:00"), "6pm")
         self.assertEqual(format_time("2026-09-30T00:00:00+08:00"), "12am")
         self.assertEqual(format_time("2026-09-30T12:00:00+08:00"), "12pm")
+
+
+class MakeAlertTest(unittest.TestCase):
+    READINGS = {"west": 61, "east": 9, "central": 58, "north": 70, "south": 11}
+
+    def test_alert_lists_high_watched_regions(self):
+        title, message = make_alert(self.READINGS, ["west", "central"], 55, "1-hr PM2.5", "µg/m³", "7pm")
+        self.assertEqual(title, "Haze alert: West 61, Central 58")
+        self.assertTrue(message.startswith("West & Central are above your limit of 55."))
+
+    def test_per_chat_settings(self):
+        self.assertIsNone(make_alert(self.READINGS, ["east"], 55, "x", "", "7pm"))
+        title, _ = make_alert(self.READINGS, ["west", "central"], 60, "x", "", "7pm")
+        self.assertEqual(title, "Haze alert: West 61")
 
 
 class ChannelsTest(unittest.TestCase):

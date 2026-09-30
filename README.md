@@ -12,10 +12,25 @@ That's it. The group is subscribed automatically.
 - **Just for yourself?** Open [@sg_haze_checker_bot](https://t.me/sg_haze_checker_bot)
   and tap **Start**.
 - **To stop:** send `/stop`, or remove the bot from the group.
-- **To resubscribe:** send `/start` (in a group: `/start@sg_haze_checker_bot`).
+- **To resubscribe:** send `/start`.
 
-The bot checks in once an hour, so the welcome message (and any reply to
-`/start` or `/stop`) can take up to an hour to arrive.
+### Choose your regions and alert level
+
+Each chat has its own settings. The default is **West or Central above 55**.
+
+| Command | What it does |
+|---|---|
+| `/settings` | show this chat's settings |
+| `/regions west east` | alert for these regions (`north`, `south`, `east`, `west`, `central`, or `all`) |
+| `/threshold 60` | alert when a chosen region goes above this number |
+| `/stop` · `/start` | turn alerts off / back on (your settings are kept while subscribed) |
+| `/help` | quick guide |
+
+- In groups, **only group admins** can change `/regions` and `/threshold`.
+- Tap `/` in the chat to pick from the command menu. If the bot doesn't
+  respond in a busy group, add its name: `/settings@sg_haze_checker_bot`.
+- The bot checks in once an hour, so replies (and the welcome message) can
+  take up to an hour to arrive.
 
 ## What an alert looks like
 
@@ -33,16 +48,20 @@ East: 9
 haze.gov.sg
 ```
 
-West and Central are listed first. ⚠️ marks any region above 55, but only
-West and Central trigger an alert. While the air stays above 55, you get an
-update every hour. Nothing is sent when the air is fine.
+Your chosen regions are listed first. ⚠️ marks any region above your limit,
+but only your chosen regions trigger an alert. While the air stays above
+your limit, you get an update every hour. Nothing is sent when the air is
+fine.
 
 ## Privacy
 
 - Nobody else can see who uses the bot. The group list is stored encrypted,
   and names or group titles never appear in this repo or its logs.
-- The bot only reacts to `/start` and `/stop`. It ignores other messages in
-  your group.
+- The bot only reacts to its own commands (`/start`, `/stop`, `/settings`,
+  `/regions`, `/threshold`, `/help`). Telegram doesn't even deliver your
+  other group messages to it (as long as it isn't made a group admin).
+- The bot's maintainer gets a private note of who added the bot, to which
+  group, and any settings changes.
 
 ---
 
@@ -74,8 +93,8 @@ Settings → Secrets and variables → Actions → **Variables** tab:
 
 | Variable | Default | Options |
 |---|---|---|
-| `REGIONS` | `west,central` | comma-separated; any of `west`, `east`, `central`, `north`, `south`. Alerts if **any** is above the threshold |
-| `THRESHOLD` | `55` | alerts when a reading is **above** it |
+| `REGIONS` | `west,central` | default for new Telegram chats and for ntfy; comma-separated; any of `west`, `east`, `central`, `north`, `south`. Alerts if **any** is above the threshold |
+| `THRESHOLD` | `55` | default alert level for new Telegram chats and for ntfy |
 | `METRIC` | `pm25` | `pm25` = 1-hr PM2.5 (µg/m³), `psi` = 24-hr PSI (not yet tested live; run a test after switching) |
 | `TELEGRAM_MAX_CHATS` | `50` | new groups beyond this are turned away (you get a ⛔ report) |
 
@@ -85,10 +104,12 @@ Settings → Secrets and variables → Actions → **Variables** tab:
   minutes later. The check starts at **:05** and retries every 30 s until
   **:15**, stopping as soon as the new reading appears (otherwise it uses the
   latest available). GitHub sometimes starts scheduled runs 5–20 min late.
-- **Subscribers:** each run reads new bot activity (joins, removals, `/start`,
-  `/stop`) and updates the group list. Chats that remove or block the bot are
-  dropped automatically.
-- **Storage:** the list (chat IDs only) is kept in the Actions cache,
+- **Subscribers:** each run reads new bot activity (joins, removals, and
+  commands) and updates the group list and each chat's settings. Chats that
+  remove or block the bot are dropped automatically. Chats that haven't set
+  their own `/regions` or `/threshold` follow your `REGIONS`/`THRESHOLD`
+  variables, so changing those changes them too.
+- **Storage:** the list (chat IDs and their settings only) is kept in the Actions cache,
   AES-256 encrypted with the bot token. If the cache is ever cleared, or you
   change the token, groups need to `/start@sg_haze_checker_bot` again.
   `TELEGRAM_CHAT_ID` chats are never lost.

@@ -87,16 +87,128 @@ def save_state(path, state):
 
 
 def _command(text):
-    """'/start@HazeBot hi' -> '/start'."""
-    first = (text or "").split(maxsplit=1)[:1]
-    return first[0].split("@")[0].lower() if first else ""
+    """'/regions@HazeBot west, east' -> ('/regions', 'west, east')."""
+    parts = (text or "").split(maxsplit=1)
+    if not parts or not parts[0].startswith("/"):
+        return "", ""
+    return parts[0].split("@")[0].lower(), (parts[1] if len(parts) > 1 else "")
+
+
+SETTINGS_COMMANDS = ("/regions", "/threshold", "/settings", "/help")
+ALL_REGIONS = ["north", "south", "east", "west", "central"]
+BOT_COMMANDS = [
+    ("settings", "Show this chat's alert settings"),
+    ("regions", "Choose regions, e.g. /regions west central"),
+    ("threshold", "Set alert level, e.g. /threshold 60"),
+    ("stop", "Stop haze alerts in this chat"),
+    ("start", "Start haze alerts in this chat"),
+    ("help", "How this bot works"),
+]
+COMMANDS_VERSION = 1
+
+
+# --- per-chat settings -----------------------------------------------------
+
+def parse_regions(args):
+    """'west, Central' -> ['west', 'central']; 'all' -> every region.
+
+    Returns (regions, None) or (None, error message).
+    """
+    words = [w for w in args.replace(",", " ").lower().split() if w]
+    if not words:
+        return None, "Tell me which regions, e.g. /regions west central"
+    if words == ["all"]:
+        return list(ALL_REGIONS), None
+    bad = [w for w in words if w not in ALL_REGIONS]
+    if bad:
+        return None, f"Unknown region: {', '.join(bad)}"
+    return list(dict.fromkeys(words)), None
+
+
+def parse_threshold(args):
+    """'60' -> 60.0. Returns (value, None) or (None, error message)."""
+    try:
+        value = float(args.strip())
+    except ValueError:
+        return None, "Give a number, e.g. /threshold 60"
+    if not 1 <= value <= 500:
+        return None, "Pick a number between 1 and 500"
+    return value, None
+
+
+def chat_settings(state, chat_id, defaults):
+    """(regions, threshold) for a chat, falling back to the defaults."""
+    chat = state["chats"].get(str(chat_id), {})
+    return (
+        chat.get("regions", defaults["regions"]),
+        chat.get("threshold", defaults["threshold"]),
+    )
+
+
+def describe_settings(regions, threshold, label):
+    return (
+        f"alerts when {' or '.join(r.title() for r in regions)} {label} "
+        f"goes above {threshold:g}"
+    )
+
+
+def help_text(defaults):
+    label = defaults["label"]
+    return (
+        "🌫️ <b>SG Haze Checker</b>\n"
+        f"Checks NEA's {label} every hour and alerts this chat when your "
+        "chosen regions go above your limit.\n\n"
+        "/settings – show this chat's settings\n"
+        "/regions west central – choose regions (north, south, east, west, "
+        "central, or all)\n"
+        f"/threshold 60 – alert level (NEA's Normal band ends at {defaults['threshold']:g})\n"
+        "/stop – stop alerts · /start – resume\n\n"
+        "In groups, only admins can change settings. Replies can take up to "
+        "an hour, as the bot checks in hourly."
+    )
+
+
+def apply_command(state, chat_id, cmd, args, defaults):
+    """Handle /settings /regions /threshold /help for a subscribed chat.
+
+    Returns (reply, change) where change is a short description for the
+    owner's report, or None if nothing changed.
+    """
+    chats = state["chats"]
+    cid = str(chat_id)
+    label = defaults["label"]
+    if cmd == "/help":
+        return help_text(defaults), None
+    if cid not in chats:
+        return "This chat isn't subscribed. Send /start first.", None
+    if cmd == "/regions":
+        regions, err = parse_regions(args)
+        if err:
+            return f"{html.escape(err)}. Options: north, south, east, west, central, or all.", None
+        chats[cid]["regions"] = regions
+        change = "regions to " + ", ".join(r.title() for r in regions)
+    elif cmd == "/threshold":
+        threshold, err = parse_threshold(args)
+        if err:
+            return f"{html.escape(err)}.", None
+        chats[cid]["threshold"] = threshold
+        change = f"threshold to {threshold:g}"
+    else:  # /settings
+        regions, threshold = chat_settings(state, cid, defaults)
+        return (
+            f"⚙️ This chat gets {describe_settings(regions, threshold, label)}.\n"
+            "Change with /regions or /threshold."
+        ), None
+    regions, threshold = chat_settings(state, cid, defaults)
+    return f"✅ Updated: this chat now gets {describe_settings(regions, threshold, label)}.", change
 
 
 def process_updates(state, updates, max_chats=None):
     """Apply Telegram updates to the subscriber list.
 
-    Returns events as (kind, chat, user) where kind is one of
-    joined / left / subscribed / unsubscribed / full. New chats beyond
+    Returns events as (kind, chat, user, extra) where kind is one of
+    joined / left / subscribed / unsubscribed / full / command. For
+    "command", extra is (msg, command, args); otherwise None. New chats beyond
     `max_chats` are turned away ("full") so the bot can't be flooded.
     """
     chats = state["chats"]
@@ -115,13 +227,13 @@ def process_updates(state, updates, max_chats=None):
             status = member["new_chat_member"]["status"]
             if status in ("member", "administrator"):
                 if is_full(cid):
-                    events.append(("full", chat, member.get("from")))
+                    events.append(("full", chat, member.get("from"), None))
                 elif cid not in chats:
                     chats[cid] = {"type": chat["type"]}
-                    events.append(("joined", chat, member.get("from")))
+                    events.append(("joined", chat, member.get("from"), None))
             elif status in ("left", "kicked"):
                 chats.pop(cid, None)
-                events.append(("left", chat, member.get("from")))
+                events.append(("left", chat, member.get("from"), None))
             continue
 
         msg = u.get("message")
@@ -131,19 +243,22 @@ def process_updates(state, updates, max_chats=None):
         cid = str(chat["id"])
         if msg.get("migrate_to_chat_id"):  # group upgraded to supergroup
             new = str(msg["migrate_to_chat_id"])
-            if chats.pop(cid, None) is not None:
-                chats[new] = {"type": "supergroup"}
+            old = chats.pop(cid, None)
+            if old is not None:
+                chats[new] = {**old, "type": "supergroup"}
             continue
-        cmd = _command(msg.get("text"))
+        cmd, args = _command(msg.get("text"))
         if cmd == "/start":
             if is_full(cid):
-                events.append(("full", chat, msg.get("from")))
+                events.append(("full", chat, msg.get("from"), None))
                 continue
             chats.setdefault(cid, {"type": chat["type"]})
-            events.append(("subscribed", chat, msg.get("from")))
+            events.append(("subscribed", chat, msg.get("from"), None))
         elif cmd == "/stop":
             chats.pop(cid, None)
-            events.append(("unsubscribed", chat, msg.get("from")))
+            events.append(("unsubscribed", chat, msg.get("from"), None))
+        elif cmd in SETTINGS_COMMANDS:
+            events.append(("command", chat, msg.get("from"), (msg, cmd, args)))
     return events
 
 
@@ -163,7 +278,8 @@ def _user_name(user):
 
 
 def owner_report(events):
-    icons = {"joined": "➕", "left": "➖", "subscribed": "🔔", "unsubscribed": "🔕", "full": "⛔"}
+    icons = {"joined": "➕", "left": "➖", "subscribed": "🔔", "unsubscribed": "🔕", "full": "⛔",
+             "changed": "⚙️"}
     verbs = {
         "joined": "added the bot to",
         "left": "removed the bot from",
@@ -171,20 +287,43 @@ def owner_report(events):
         "unsubscribed": "sent /stop in",
         "full": "was turned away (subscriber limit reached) in",
     }
-    lines = [
-        f"{icons[kind]} {html.escape(_user_name(user), quote=False)} {verbs[kind]} "
-        f"{html.escape(_chat_name(chat), quote=False)}"
-        for kind, chat, user in events
-    ]
+    lines = []
+    for kind, chat, user, extra in events:
+        verb = f"set {extra} in" if kind == "changed" else verbs[kind]
+        lines.append(
+            f"{icons[kind]} {html.escape(_user_name(user), quote=False)} {verb} "
+            f"{html.escape(_chat_name(chat), quote=False)}"
+        )
     return "<b>Haze bot activity</b>\n" + "\n".join(lines)
 
 
-def sync(token, state_path, owner_chat_id, welcome, max_chats=None):
-    """Pull new updates, update the list, greet new chats, tell the owner.
+ANONYMOUS_ADMIN_BOT = 1087968824  # Telegram's "Group" sender for anonymous admins
 
-    Returns the updated state (already saved).
+
+def is_group_admin(token, msg):
+    chat = msg["chat"]
+    if chat["type"] not in ("group", "supergroup"):
+        return True  # private chat: it's their own setting
+    if (msg.get("sender_chat") or {}).get("id") == chat["id"]:
+        return True  # sent by an anonymous admin
+    user = msg.get("from") or {}
+    if user.get("id") == ANONYMOUS_ADMIN_BOT:
+        return True
+    member = call(token, "getChatMember", chat_id=chat["id"], user_id=user.get("id"))
+    return member.get("status") in ("creator", "administrator")
+
+
+def sync(token, state_path, owner_chat_id, defaults, max_chats=None):
+    """Pull new updates, update the list and settings, reply, tell the owner.
+
+    `defaults` has "regions", "threshold" and "label". Returns the updated
+    state (already saved).
     """
     state = load_state(state_path)
+    if state.get("commands_version") != COMMANDS_VERSION:
+        call(token, "setMyCommands",
+             commands=[{"command": c, "description": d} for c, d in BOT_COMMANDS])
+        state["commands_version"] = COMMANDS_VERSION
     updates = call(
         token, "getUpdates",
         offset=state["offset"],
@@ -192,25 +331,47 @@ def sync(token, state_path, owner_chat_id, welcome, max_chats=None):
         allowed_updates=["message", "my_chat_member"],
     )
     events = process_updates(state, updates, max_chats)
-    save_state(state_path, state)
 
-    for kind, chat, _ in events:
-        text = {
-            "joined": welcome,
-            "subscribed": welcome,
-            "unsubscribed": "🔕 Haze alerts stopped here. Send /start to turn them back on.",
-            "full": "Sorry, this haze bot isn't taking new chats right now.",
-        }.get(kind)
+    report = []
+    for kind, chat, user, extra in events:
+        text = None
+        if kind in ("joined", "subscribed"):
+            regions, threshold = chat_settings(state, chat["id"], defaults)
+            text = (
+                f"👋 This chat will get haze {describe_settings(regions, threshold, defaults['label'])} "
+                "(checked hourly, data from NEA).\n"
+                "Send /settings to change this, or /stop to turn alerts off."
+            )
+        elif kind == "unsubscribed":
+            text = "🔕 Haze alerts stopped here. Send /start to turn them back on."
+        elif kind == "full":
+            text = "Sorry, this haze bot isn't taking new chats right now."
+        elif kind == "command":
+            msg, cmd, args = extra
+            try:
+                allowed = cmd not in ("/regions", "/threshold") or is_group_admin(token, msg)
+            except TelegramError as e:
+                print(f"Couldn't check admin status in a {chat.get('type')} chat: {e}")
+                allowed = False
+            if allowed:
+                text, change = apply_command(state, chat["id"], cmd, args, defaults)
+                if change:
+                    report.append(("changed", chat, user, change))
+            else:
+                text = "Only group admins can change the alert settings."
+        if kind != "command":
+            report.append((kind, chat, user, extra))
         if text:
             try:
                 send_message(token, chat["id"], text)
             except TelegramError as e:
                 print(f"Couldn't reply to a {chat.get('type')} chat: {e}")
-    if events and owner_chat_id:
-        send_message(token, owner_chat_id, owner_report(events))
+    save_state(state_path, state)
+    if report and owner_chat_id:
+        send_message(token, owner_chat_id, owner_report(report))
 
     counts = {}
-    for kind, _, _ in events:
+    for kind, _, _, _ in events:
         counts[kind] = counts.get(kind, 0) + 1
     print(f"Telegram: {len(state['chats'])} subscribed chats; new activity: {counts or 'none'}")
     return state
@@ -219,23 +380,31 @@ def sync(token, state_path, owner_chat_id, welcome, max_chats=None):
 def broadcast(token, state, state_path, extra_chat_ids, text):
     """Send to every chat in state["chats"] plus any fixed chat IDs.
 
-    Chats that removed/blocked the bot are dropped from the list. Returns the
-    number of chats that failed for other reasons.
+    `text` is a string, or a function chat_id -> string/None so each chat can
+    get its own message (None = nothing to send to that chat). Chats that
+    removed/blocked the bot are dropped from the list. Returns the number of
+    chats that failed for other reasons.
     """
+    text_for = text if callable(text) else (lambda _cid: text)
     chats = state["chats"]
     targets = list(dict.fromkeys(list(extra_chat_ids) + list(chats)))
-    sent = failed = 0
+    sent = skipped = failed = 0
     for cid in targets:
+        body = text_for(cid)
+        if body is None:
+            skipped += 1
+            continue
         try:
             try:
-                send_message(token, cid, text)
+                send_message(token, cid, body)
             except TelegramError as e:
                 if not e.migrate_to:
                     raise
                 new = str(e.migrate_to)
-                if chats.pop(cid, None) is not None:
-                    chats[new] = {"type": "supergroup"}
-                send_message(token, new, text)
+                old = chats.pop(cid, None)
+                if old is not None:
+                    chats[new] = {**old, "type": "supergroup"}
+                send_message(token, new, body)
             sent += 1
         except TelegramError as e:
             if e.chat_gone and cid in chats:
@@ -246,5 +415,5 @@ def broadcast(token, state, state_path, extra_chat_ids, text):
                 failed += 1
     if state_path:
         save_state(state_path, state)
-    print(f"Telegram: sent to {sent} chat(s), {failed} failed.")
+    print(f"Telegram: sent to {sent} chat(s), {skipped} below their limit, {failed} failed.")
     return failed
