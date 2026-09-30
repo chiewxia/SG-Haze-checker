@@ -63,6 +63,22 @@ class ProcessUpdatesTest(unittest.TestCase):
         self.assertEqual(state["chats"], {"-1009": {"type": "supergroup"}})
 
 
+class SubscriberLimitTest(unittest.TestCase):
+    def test_new_chats_turned_away_when_full(self):
+        state = {"offset": 0, "chats": {"1": {"type": "private"}}}
+        events = tg.process_updates(state, [
+            member_update(1, GROUP, "member"),
+            message_update(2, DM, "/start"),
+        ], max_chats=1)
+        self.assertEqual(list(state["chats"]), ["1"])
+        self.assertEqual([e[0] for e in events], ["full", "full"])
+
+    def test_existing_chat_can_still_start_when_full(self):
+        state = {"offset": 0, "chats": {"42": {"type": "private"}}}
+        events = tg.process_updates(state, [message_update(1, DM, "/start")], max_chats=1)
+        self.assertEqual([e[0] for e in events], ["subscribed"])
+
+
 class OwnerReportTest(unittest.TestCase):
     def test_report_names_who_and_where_escaped(self):
         text = tg.owner_report([("joined", GROUP, ANN), ("subscribed", DM, ANN)])

@@ -13,6 +13,7 @@ Config (environment variables):
   TELEGRAM_OWNER_CHAT_ID  optional; gets "who added the bot where" reports
                       and test messages
   TELEGRAM_STATE      default ".state/telegram_chats.json" subscriber list
+  TELEGRAM_MAX_CHATS  default 50; new groups/chats beyond this are turned away
                (set NTFY_TOPIC, TELEGRAM_BOT_TOKEN, or both)
   REGIONS      default "west,central"  comma-separated regions to watch
                                 (west/east/central/north/south); alert if ANY
@@ -151,8 +152,9 @@ class TelegramChannel:
     spam everyone's groups.
     """
 
-    def __init__(self, token, chat_ids, owner_chat_id, state_path):
+    def __init__(self, token, chat_ids, owner_chat_id, state_path, max_chats):
         self.token = token
+        self.max_chats = max_chats
         self.chat_ids = chat_ids
         self.owner_chat_id = owner_chat_id
         self.state_path = state_path
@@ -161,7 +163,7 @@ class TelegramChannel:
 
     def sync(self, welcome):
         self.state = telegram_subs.sync(
-            self.token, self.state_path, self.owner_chat_id, welcome
+            self.token, self.state_path, self.owner_chat_id, welcome, self.max_chats
         )
 
     def __call__(self, title, message, priority):
@@ -196,7 +198,10 @@ def build_channels(env):
     owner = env.get("TELEGRAM_OWNER_CHAT_ID", "").strip()
     if token:
         state_path = env.get("TELEGRAM_STATE", ".state/telegram_chats.json")
-        channels.append(("telegram", TelegramChannel(token, chat_ids, owner, state_path)))
+        max_chats = int(env.get("TELEGRAM_MAX_CHATS", "50"))
+        channels.append(
+            ("telegram", TelegramChannel(token, chat_ids, owner, state_path, max_chats))
+        )
     elif chat_ids or owner:
         sys.exit("TELEGRAM_BOT_TOKEN is not set - see README.md")
     return channels

@@ -92,14 +92,19 @@ def _command(text):
     return first[0].split("@")[0].lower() if first else ""
 
 
-def process_updates(state, updates):
+def process_updates(state, updates, max_chats=None):
     """Apply Telegram updates to the subscriber list.
 
     Returns events as (kind, chat, user) where kind is one of
-    joined / left / subscribed / unsubscribed.
+    joined / left / subscribed / unsubscribed / full. New chats beyond
+    `max_chats` are turned away ("full") so the bot can't be flooded.
     """
     chats = state["chats"]
     events = []
+
+    def is_full(cid):
+        return max_chats is not None and cid not in chats and len(chats) >= max_chats
+
     for u in updates:
         state["offset"] = max(state["offset"], u["update_id"] + 1)
 
@@ -109,7 +114,9 @@ def process_updates(state, updates):
             cid = str(chat["id"])
             status = member["new_chat_member"]["status"]
             if status in ("member", "administrator"):
-                if cid not in chats:
+                if is_full(cid):
+                    events.append(("full", chat, member.get("from")))
+                elif cid not in chats:
                     chats[cid] = {"type": chat["type"]}
                     events.append(("joined", chat, member.get("from")))
             elif status in ("left", "kicked"):
@@ -129,6 +136,9 @@ def process_updates(state, updates):
             continue
         cmd = _command(msg.get("text"))
         if cmd == "/start":
+            if is_full(cid):
+                events.append(("full", chat, msg.get("from")))
+                continue
             chats.setdefault(cid, {"type": chat["type"]})
             events.append(("subscribed", chat, msg.get("from")))
         elif cmd == "/stop":
@@ -153,12 +163,13 @@ def _user_name(user):
 
 
 def owner_report(events):
-    icons = {"joined": "➕", "left": "➖", "subscribed": "🔔", "unsubscribed": "🔕"}
+    icons = {"joined": "➕", "left": "➖", "subscribed": "🔔", "unsubscribed": "🔕", "full": "⛔"}
     verbs = {
         "joined": "added the bot to",
         "left": "removed the bot from",
         "subscribed": "sent /start in",
         "unsubscribed": "sent /stop in",
+        "full": "was turned away (subscriber limit reached) in",
     }
     lines = [
         f"{icons[kind]} {html.escape(_user_name(user), quote=False)} {verbs[kind]} "
@@ -168,7 +179,7 @@ def owner_report(events):
     return "<b>Haze bot activity</b>\n" + "\n".join(lines)
 
 
-def sync(token, state_path, owner_chat_id, welcome):
+def sync(token, state_path, owner_chat_id, welcome, max_chats=None):
     """Pull new updates, update the list, greet new chats, tell the owner.
 
     Returns the updated state (already saved).
@@ -180,7 +191,7 @@ def sync(token, state_path, owner_chat_id, welcome):
         timeout=0,
         allowed_updates=["message", "my_chat_member"],
     )
-    events = process_updates(state, updates)
+    events = process_updates(state, updates, max_chats)
     save_state(state_path, state)
 
     for kind, chat, _ in events:
@@ -188,6 +199,7 @@ def sync(token, state_path, owner_chat_id, welcome):
             "joined": welcome,
             "subscribed": welcome,
             "unsubscribed": "🔕 Haze alerts stopped here. Send /start to turn them back on.",
+            "full": "Sorry, this haze bot isn't taking new chats right now.",
         }.get(kind)
         if text:
             try:

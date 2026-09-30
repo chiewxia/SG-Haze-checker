@@ -90,15 +90,36 @@ chat.
 - **Anyone who finds the bot can add it** to their group and get alerts.
   You'll be told each time. Telegram shows you who added it and where, but
   never who read a message.
-- **The subscriber list is stored in GitHub's Actions cache** (chat IDs only;
-  names are sent only to you in Telegram, never saved to files or logs,
-  since a public repo's logs are public). If GitHub ever clears the cache,
-  groups need to send `/start@YourBot` again to resubscribe; fixed
+- **At most 50 chats** can subscribe (change with a `TELEGRAM_MAX_CHATS`
+  variable). Beyond that, new groups are politely turned away and you get a
+  ⛔ report, so nobody can flood the bot.
+- If GitHub ever clears the Actions cache, or you change the bot token,
+  groups need to send `/start@YourBot` again to resubscribe. Fixed
   `TELEGRAM_CHAT_ID` chats are never lost.
 - If the workflow is paused for more than 24 hours, Telegram discards joins
   and `/start`s from that time; those chats need to `/start` again.
 - If a send fails for reasons other than the bot being removed, ntfy still
   goes out and the run shows as failed in the Actions tab.
+
+### Privacy (this repo is public)
+
+- **Token and chat IDs are GitHub secrets.** They're encrypted, never in the
+  code, and blanked out (`***`) in logs. Forks and pull requests don't get
+  them, and only people with write access can run the workflow.
+- **Who used the bot is never public.** Names, handles and group titles are
+  sent only to you in Telegram. Logs show counts only
+  (e.g. "3 subscribed chats").
+- **The subscriber list is encrypted** (AES-256, keyed by your bot token)
+  before it goes into the Actions cache, so even the cache is useless without
+  your secret.
+
+### Cost
+
+**Free, and abuse can't make it cost you money.** The Telegram Bot API is
+free with no paid tier to trip into, and public repos get unlimited Actions
+minutes. The worst someone can do is add the bot to groups (capped at 50,
+and you're told) or spam it with messages, which it ignores. If the token
+ever leaks, message @BotFather → `/revoke` and update the secret.
 
 ## Sharing with others
 

@@ -24,12 +24,13 @@ jobs:
     timeout-minutes: 14
     steps:
       - uses: actions/checkout@v4
-      # Telegram subscriber list (chat IDs only) lives in the Actions cache.
+      # Telegram subscriber list lives in the Actions cache, encrypted with the
+      # bot token (a secret), so the cache is useless to anyone without it.
       # Each run restores the newest copy and saves an updated one.
       - name: Restore Telegram subscriber list
         uses: actions/cache/restore@v4
         with:
-          path: .state
+          path: .state/chats.enc
           key: telegram-chats-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: telegram-chats-
       - name: Check haze and notify
@@ -44,10 +45,23 @@ jobs:
           THRESHOLD: ${{ vars.THRESHOLD || '55' }}
           METRIC: ${{ vars.METRIC || 'pm25' }}
           FORCE_TEST: ${{ github.event_name == 'workflow_dispatch' && inputs.test && '1' || '0' }}
-        run: python3 haze_check.py
+        run: |
+          enc() { openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -pass env:TELEGRAM_BOT_TOKEN "$@"; }
+          if [ -f .state/chats.enc ] && [ -n "$TELEGRAM_BOT_TOKEN" ]; then
+            enc -d -in .state/chats.enc -out "$TELEGRAM_STATE" 2>/dev/null \
+              || { echo "Couldn't decrypt subscriber list (token changed?); starting fresh."; rm -f "$TELEGRAM_STATE"; }
+          fi
+          rm -f .state/chats.enc
+          status=0
+          python3 haze_check.py || status=$?
+          if [ -f "$TELEGRAM_STATE" ]; then
+            enc -salt -in "$TELEGRAM_STATE" -out .state/chats.enc
+            rm -f "$TELEGRAM_STATE"
+          fi
+          exit $status
       - name: Save Telegram subscriber list
-        if: always() && hashFiles('.state/telegram_chats.json') != ''
+        if: always() && hashFiles('.state/chats.enc') != ''
         uses: actions/cache/save@v4
         with:
-          path: .state
+          path: .state/chats.enc
           key: telegram-chats-${{ github.run_id }}-${{ github.run_attempt }}
