@@ -19,7 +19,7 @@ Config (environment variables):
                                 (west/east/central/north/south); alert if ANY
                                 is above the threshold. Telegram chats can
                                 override with /regions.
-  THRESHOLD    default 40       alert when the reading is ABOVE this
+  THRESHOLD    default 50       alert when the reading is ABOVE this
                                 (Telegram chats can override with /threshold)
   METRIC       default "pm25"   "pm25" = 1-hr PM2.5 (µg/m³), "psi" = 24-hr PSI
   NTFY_SERVER  default "https://ntfy.sh"
@@ -45,7 +45,7 @@ API_BASE = "https://api-open.data.gov.sg/v2/real-time/api/"
 # same name (Settings > Secrets and variables > Actions > Variables).
 DEFAULTS = {
     "REGIONS": "west,central",
-    "THRESHOLD": "40",
+    "THRESHOLD": "50",
     "METRIC": "pm25",
     "STOP_MINUTE": "30",
     "POLL_SECONDS": "60",

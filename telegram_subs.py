@@ -115,7 +115,7 @@ BOT_SHORT_DESCRIPTION = (  # profile / share card, max 120 chars
 )
 BOT_DESCRIPTION = (  # "What can this bot do?" / bot profile, max 512 chars
     "🌫️ Hourly Singapore haze alerts (NEA 1-hr PM2.5). Default: West or "
-    "Central above 40.\n\n"
+    "Central above 50.\n\n"
     "Commands:\n"
     "/settings – show this chat's settings\n"
     "/regions west central – set regions (north, south, east, west, central, all)\n"
@@ -125,7 +125,7 @@ BOT_DESCRIPTION = (  # "What can this bot do?" / bot profile, max 512 chars
     "Only group admins can change settings. ⏱ I check in hourly, so replies "
     "and changes apply at the next check."
 )
-COMMANDS_VERSION = 5
+COMMANDS_VERSION = 6
 
 
 # --- per-chat settings -----------------------------------------------------

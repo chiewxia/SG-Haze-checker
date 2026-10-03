@@ -2,7 +2,7 @@
 
 Hourly haze alerts for Singapore. Every hour this checks NEA's 1-hr PM2.5
 readings (the same data haze.gov.sg shows) and sends an alert when **West or
-Central** goes **above 40**. That's an early warning: NEA's "Normal" band
+Central** goes **above 50**. That's an early warning: NEA's "Normal" band
 for 1-hr PM2.5 runs to 55, so you hear about rising haze before it gets there.
 
 ## Get alerts on Telegram
@@ -17,7 +17,7 @@ That's it. The group is subscribed automatically.
 
 ### Choose your regions and alert level
 
-Each chat has its own settings. The default is **West or Central above 40**.
+Each chat has its own settings. The default is **West or Central above 50**.
 Changing them only affects **your** chat. Other groups and the maintainer's
 own alerts stay as they are.
 
@@ -41,12 +41,12 @@ own alerts stay as they are.
 ## What an alert looks like
 
 ```
-Haze alert: West 61, Central 48
-West & Central are above your limit of 40.
+Haze alert: West 61, Central 52
+West & Central are above your limit of 50.
 
 1-hr PM2.5 at 7pm (µg/m³):
 West: 61 ⚠️
-Central: 48 ⚠️
+Central: 52 ⚠️
 North: 70 ⚠️
 South: 11
 East: 9
@@ -127,7 +127,7 @@ repo variable with the same name (Settings → Secrets and variables → Actions
 | Variable | Default | Options |
 |---|---|---|
 | `REGIONS` | `west,central` | used by ntfy and by Telegram chats that haven't picked their own; comma-separated; any of `west`, `east`, `central`, `north`, `south`. Alerts if **any** is above the threshold |
-| `THRESHOLD` | `40` | used by ntfy and by Telegram chats that haven't set their own |
+| `THRESHOLD` | `50` | used by ntfy and by Telegram chats that haven't set their own |
 
 **Telegram commands never change ntfy.** A group's `/regions` or `/threshold`
 only affects that group's Telegram alerts. ntfy always follows the two
